@@ -15,12 +15,12 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/b0untyhunt3r/taktis/raw/master/docs/demo.mp4" title="Click to play the demo">
-    <img src="docs/demo-poster.png" alt="Pipeline Designer demo — click to play" width="900">
-  </a>
+  <video src="https://github.com/user-attachments/assets/9db10935-3894-4d92-b27c-0c62ef6ed7da"
+         poster="docs/demo-poster.png"
+         controls muted playsinline width="900">
+    <a href="https://github.com/user-attachments/assets/9db10935-3894-4d92-b27c-0c62ef6ed7da">Watch the 30-second demo</a> — pipeline designer, node configuration, dashboard, scheduler.
+  </video>
 </p>
-
-> [Watch the 30-second demo](https://github.com/b0untyhunt3r/taktis/raw/master/docs/demo.mp4) — pipeline designer, node configuration, dashboard, scheduler.
 
 Built for developers, researchers, and analysts running multi-stage work with Claude Code who want parallel agents, review cycles, and crash-resumable pipelines without writing the scaffolding themselves. **taktis** is the layer on top of the [Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk/overview) that handles wave-parallel execution, persona assignment, cross-task context, and phase review — all driven from a browser UI.
 
