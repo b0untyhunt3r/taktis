@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Projects — Taktis{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb">
+  <a href="/">Dashboard</a> <span class="sep">/</span>
+  <span class="current">Projects</span>
+</nav>
+<div class="flex-between mb-1">
+  <h1>Projects</h1>
+  <button class="btn btn-success" onclick="toggleNewProjectForm()" id="new-project-btn"
+          style="font-size:0.82rem; display:inline-flex; align-items:center; gap:0.35rem;">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    New Project
+  </button>
+</div>
+
+<!-- New Project Form (hidden by default) -->
+<div class="panel" id="new-project-form" style="display:none;">
+  <div class="flex-between" style="margin-bottom:0.75rem;">
+    <h2 style="margin:0;">New Project</h2>
+    <button class="btn-sm" onclick="toggleNewProjectForm()" title="Close" style="background:transparent; border:none; cursor:pointer; color:var(--text-muted); font-size:1.1rem;">&times;</button>
+  </div>
+  <form hx-post="/api/projects"
+        hx-swap="none">
+    <div class="form-row">
+      <div>
+        <label for="name">Project Name</label>
+        <input type="text" id="name" name="name" required placeholder="my-project"
+               maxlength="80" pattern="[a-zA-Z0-9][a-zA-Z0-9 _.\\-]{0,79}"
+               title="Letters, digits, spaces, hyphens, underscores, dots. Must start with a letter or digit.">
+      </div>
+      <div>
+        <label for="working_dir">Working Directory</label>
+        <input type="text" id="working_dir" name="working_dir" required placeholder="/path/to/project">
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="description">Description</label>
+      <textarea id="description" name="description" rows="3"
+                placeholder="Describe what you want to build..."></textarea>
+    </div>
+    <div class="form-group">
+      <label>
+        <input type="checkbox" name="create_dir" style="width:auto; margin-right:0.4rem;">
+        Create directory if it doesn't exist
+      </label>
+    </div>
+    <div class="form-group">
+      <label for="pipeline_template">Pipeline Template</label>
+      <select id="pipeline_template" name="pipeline_template" onchange="onPipelineTemplateChange()">
+        <option value="">None</option>
+        {% for tmpl in pipeline_templates %}
+        <option value="{{ tmpl.id }}" data-required-env-vars='{{ (tmpl.required_env_vars or []) | tojson }}'>{{ tmpl.name }}</option>
+        {% endfor %}
+      </select>
+      <small style="color:var(--text-muted); display:block; margin-top:0.25rem;">
+        Choose a pipeline to run on project creation. <a href="/pipelines">Edit templates</a>
+      </small>
+    </div>
+    <!-- Required Environment Variables — populated when a pipeline declaring ${VAR} is selected -->
+    <div id="required-env-vars" class="form-group" style="display:none;">
+      <label>Required Environment Variables</label>
+      <p style="color:var(--text-muted); font-size:0.78rem; margin:0 0 0.5rem 0;">
+        This pipeline references <code>${VAR}</code> values from API Call nodes. Fill them in here, or leave blank to fall back to your shell <code>.env</code>.
+      </p>
+      <div id="required-env-vars-rows" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
+    </div>
+    <input type="hidden" id="env_vars_field" name="env_vars" value="">
+    <div id="create-project-error"></div>
+    <button type="submit" onclick="return validateProjectForm()">Create Project</button>
+  </form>
+</div>
+
+<!-- Project List -->
+<div id="project-list"
+     hx-get="/partials/project-list"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+  <div class="text-muted" style="text-align:center; padding:3rem;">Loading&hellip;</div>
+</div>
+{% with advisor_title="Projects Advisor", advisor_subtitle="Get help with project setup, descriptions, and planning.", advisor_placeholder="Ask about project setup..." %}
+{% include "partials/advisor_widget.html" %}
+{% endwith %}
+
+<script>
+function toggleNewProjectForm() {
+  var form = document.getElementById('new-project-form');
+  var isHidden = form.style.display === 'none';
+  form.style.display = isHidden ? 'block' : 'none';
+  if (isHidden) {
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    var nameInput = document.getElementById('name');
+    if (nameInput) setTimeout(function() { nameInput.focus(); }, 150);
+  }
+}
+
+function validateProjectForm() {
+  const tmpl = document.querySelector('[name="pipeline_template"]');
+  const desc = document.querySelector('[name="description"]');
+  const errDiv = document.getElementById('create-project-error');
+  if (tmpl && tmpl.value && (!desc || !desc.value.trim())) {
+    errDiv.innerHTML = '<div class="error" style="color:var(--danger);margin:0.5rem 0;">A description is required when a pipeline template is selected.</div>';
+    desc.focus();
+    return false;
+  }
+  // Serialize required-env-var inputs into the hidden env_vars field so
+  // api_create_project can apply them before the pipeline starts.
+  const envField = document.getElementById('env_vars_field');
+  const rows = document.querySelectorAll('#required-env-vars-rows .env-row');
+  const env = {};
+  for (const row of rows) {
+    const k = row.dataset.key;
+    const v = row.querySelector('input').value;
+    if (k) env[k] = v;
+  }
+  envField.value = Object.keys(env).length ? JSON.stringify(env) : '';
+  errDiv.innerHTML = '';
+  return true;
+}
+
+function onPipelineTemplateChange() {
+  const sel = document.getElementById('pipeline_template');
+  const wrap = document.getElementById('required-env-vars');
+  const rowsEl = document.getElementById('required-env-vars-rows');
+  if (!sel.value) { wrap.style.display = 'none'; rowsEl.innerHTML = ''; return; }
+  const opt = sel.options[sel.selectedIndex];
+  let vars = [];
+  try { vars = JSON.parse(opt.dataset.requiredEnvVars || '[]'); } catch { vars = []; }
+  if (!vars.length) { wrap.style.display = 'none'; rowsEl.innerHTML = ''; return; }
+  wrap.style.display = '';
+  rowsEl.innerHTML = '';
+  for (const k of vars) {
+    const isSecret = /(TOKEN|KEY|SECRET|PASSWORD|PASS)/i.test(k);
+    const row = document.createElement('div');
+    row.className = 'env-row';
+    row.dataset.key = k;
+    row.style.cssText = 'display:flex; gap:0.5rem; align-items:center;';
+    row.innerHTML =
+      '<code style="flex:0 0 200px; font-family:var(--mono); font-size:0.82rem; padding:0.4rem 0.6rem; background:var(--bg-elevated); border-radius:var(--radius); border:1px solid var(--border);">' + k + '</code>' +
+      '<input type="' + (isSecret ? 'password' : 'text') + '" placeholder="value (or leave blank to use .env)" style="flex:1;">';
+    rowsEl.appendChild(row);
+  }
+}
+
+function getFormContext() {
+  var tmplSelect = document.querySelector('[name="pipeline_template"]');
+  var tmplName = tmplSelect ? tmplSelect.options[tmplSelect.selectedIndex].text : '';
+  return {
+    name: (document.querySelector('[name="name"]') || {}).value || '',
+    description: (document.querySelector('[name="description"]') || {}).value || '',
+    working_dir: (document.querySelector('[name="working_dir"]') || {}).value || '',
+    pipeline_template: tmplName,
+  };
+}
+
+initAdvisor('project', null, {
+  contextDataFn: getFormContext
+});
+</script>
+{% endblock %}

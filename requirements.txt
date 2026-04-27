@@ -1,0 +1,17 @@
+claude-agent-sdk
+starlette
+uvicorn[standard]
+python-multipart
+pydantic
+pydantic-settings
+pyyaml
+aiosqlite
+httpx
+click
+python-dotenv
+jsonschema
+jinja2
+markupsafe
+sse-starlette
+mcp
+rpds-py

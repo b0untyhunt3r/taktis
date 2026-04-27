@@ -1,0 +1,48 @@
+<!-- Floating Advisor Chat Widget -->
+<div class="advisor-widget" id="advisor-widget">
+  <div class="advisor-popup" id="advisor-popup">
+    <div class="advisor-popup-header">
+      <div class="advisor-avatar">
+        <img src="/static/favicon.svg" alt="" width="22" height="22" style="border-radius:3px;">
+      </div>
+      <div class="advisor-info">
+        <div class="advisor-name">{{ advisor_title|default('Advisor') }}</div>
+        <div class="advisor-subtitle">{{ advisor_subtitle|default('Ask questions or get suggestions') }}</div>
+      </div>
+      <button class="advisor-close" onclick="toggleAdvisor()" title="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="advisor-messages" id="advisor-messages">
+      <div class="advisor-welcome" id="advisor-welcome">
+        <img src="/static/favicon.svg" alt="" width="40" height="40" style="border-radius:6px;">
+        <div class="welcome-title">{{ advisor_title|default('Advisor') }}</div>
+        <div class="welcome-subtitle">{{ advisor_subtitle|default('Ask questions or get suggestions.') }}</div>
+      </div>
+    </div>
+    <div class="advisor-input-area">
+      <div class="advisor-input-wrap">
+        <textarea id="advisor-input" placeholder="{{ advisor_placeholder|default('Ask for advice...') }}" rows="1"
+                  oninput="autoResizeTextarea(this)"
+                  onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendConsult();}"></textarea>
+        <button class="advisor-send-btn" onclick="sendConsult()" title="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <button class="advisor-fab" id="advisor-fab" onclick="toggleAdvisor()" title="Ask Advisor">
+    <span class="fab-icon-chat">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+    </span>
+    <span class="fab-icon-close">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </span>
+  </button>
+</div>

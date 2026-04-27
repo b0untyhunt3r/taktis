@@ -1,0 +1,201 @@
+{# Unified template: both running and completed tasks use accumulated blocks.
+   Tool results are merged INTO their tool_use block's collapsible body.
+   Uses specialized tool widgets (Improvement 1) and inline diff (Improvement 2).
+   Turn separators between conversation turns (Improvement 6).
+   Per-message token/cost footer on result blocks (Improvement 4). #}
+{% if blocks is defined %}
+{% set ns = namespace(turn_count=0, last_type='', had_user_message=false) %}
+{% for block in blocks %}
+
+{# Turn separator between user->assistant transitions (Improvement 6) #}
+{# Note: result blocks already emit their own --- separator, so only trigger on user_message #}
+{# Thinking blocks are transparent — don't reset last_type for turn tracking #}
+{% if block.type in ['text', 'tool_use'] and ns.last_type in ['user_message', 'thinking'] and ns.had_user_message %}
+{% set ns.turn_count = ns.turn_count + 1 %}
+{% set ns.had_user_message = false %}
+<div class="turn-separator"><span class="turn-label">Turn {{ ns.turn_count }}</span></div>
+{% endif %}
+
+{% if block.type == 'thinking' %}
+<details class="thinking-block"{% if block.in_progress %} open{% endif %}>
+<summary><span class="thinking-icon">{% if block.in_progress %}&#10024;{% else %}&#129504;{% endif %}</span><span class="thinking-label">{% if block.in_progress %}Thinking...{% else %}Thought process{% endif %}</span></summary>
+<div class="thinking-content"{% if block.in_progress %} id="thinking-active"{% endif %}>{{ block.text }}</div>
+</details>
+
+{% elif block.type == 'text' %}
+<div class="msg-card msg-assistant">
+<div class="msg-icon">&#9656;</div>
+<div class="msg-content">{% if block.in_progress %}<div class="md-render" id="current-text-block">{{ block.text }}</div><span id="typing-indicator" class="typing-cursor"></span>
+{% else %}<div class="md-render">{{ block.text }}</div>{% endif %}</div>
+</div>
+
+{% elif block.type == 'result' %}
+{# Show result text if present (fallback when no assistant events) #}
+{% if block.text %}
+<div class="msg-card msg-system">
+<div class="msg-icon">&#10003;</div>
+<div class="msg-content"><div class="md-render">{{ block.text }}</div></div>
+</div>
+{% endif %}
+{# Per-message token/cost display (Improvement 4) #}
+{% if block.input_tokens is defined or block.output_tokens is defined %}
+<div class="msg-tokens">
+{% if block.input_tokens is defined %}<span>{{ '{:,}'.format(block.input_tokens) }} in</span>{% endif %}
+{% if block.output_tokens is defined %}<span>{{ '{:,}'.format(block.output_tokens) }} out</span>{% endif %}
+{% if block.cost_usd is defined and block.cost_usd %}<span>${{ '{:.4f}'.format(block.cost_usd) }}</span>{% endif %}
+</div>
+{% endif %}
+<div class="turn-separator"><span class="turn-label">---</span></div>
+
+{% elif block.type == 'tool_use' %}
+{# Specialized Tool Widgets (Improvement 1) with inline diff (Improvement 2) #}
+{% set tool_lower = block.name | default('') | lower %}
+
+{% if tool_lower == 'bash' %}
+<details class="tool-widget tool-bash"{% if block.result is defined and block.result %} open{% endif %}>
+<summary class="tool-widget-header">
+<span class="tw-icon">&#9654;</span>
+<span class="tw-name">Bash</span>
+<span class="tw-cmd">{{ (block.input.command | default(''))[:120] }}</span>
+<span class="tool-widget-chevron">&#9654;</span>
+</summary>
+{% if block.result is defined and block.result %}<div class="tool-widget-body{% if 'error' in block.result[:50] | lower or block.result[:10] == 'Exit code' %} tw-error{% else %} tw-success{% endif %}">{{ block.result }}</div>{% endif %}
+</details>
+
+{% elif tool_lower == 'read' %}
+<details class="tool-widget tool-read"{% if block.result is defined and block.result %} open{% endif %}>
+<summary class="tool-widget-header">
+<span class="tw-icon">&#128196;</span>
+<span class="tw-name">Read</span>
+<span class="tw-path">{{ (block.input.file_path | default(''))[:100] }}</span>
+<span class="tool-widget-chevron">&#9654;</span>
+</summary>
+{% if block.result is defined and block.result %}<div class="tool-widget-body">{{ block.result }}</div>{% endif %}
+</details>
+
+{% elif tool_lower == 'edit' %}
+<details class="tool-widget tool-edit"{% if block.result is defined and block.result %} open{% endif %}>
+<summary class="tool-widget-header">
+<span class="tw-icon">&#9999;&#65039;</span>
+<span class="tw-name">Edit</span>
+<span class="tw-path">{{ (block.input.file_path | default(''))[:100] }}</span>
+<span class="tool-widget-chevron">&#9654;</span>
+</summary>
+{% if block.input is defined and block.input is mapping and (block.input.old_string is defined or block.input.new_string is defined) %}
+<div class="tool-widget-body">
+<div class="diff-view">
+{% for line in (block.input.old_string | default('')).splitlines() %}
+<div class="diff-line diff-line-del">{{ line }}</div>
+{% endfor %}
+{% for line in (block.input.new_string | default('')).splitlines() %}
+<div class="diff-line diff-line-add">{{ line }}</div>
+{% endfor %}
+</div>
+</div>
+{% elif block.result is defined and block.result %}
+<div class="tool-widget-body" style="padding:0.5rem 0.75rem;">{{ block.result }}</div>
+{% endif %}
+</details>
+
+{% elif tool_lower == 'write' %}
+<details class="tool-widget tool-write"{% if block.result is defined and block.result %} open{% endif %}>
+<summary class="tool-widget-header">
+<span class="tw-icon">&#128221;</span>
+<span class="tw-name">Write</span>
+<span class="tw-path">{{ (block.input.file_path | default(''))[:100] }}</span>
+<span class="tool-widget-chevron">&#9654;</span>
+</summary>
+{% if block.result is defined and block.result %}<div class="tool-widget-body">{{ block.result }}</div>{% endif %}
+</details>
+
+{% elif tool_lower in ['grep', 'glob'] %}
+<details class="tool-widget tool-search"{% if block.result is defined and block.result %} open{% endif %}>
+<summary class="tool-widget-header">
+<span class="tw-icon">{% if tool_lower == 'grep' %}&#128269;{% else %}&#128193;{% endif %}</span>
+<span class="tw-name">{{ 'Grep' if tool_lower == 'grep' else 'Glob' }}</span>
+<span class="tw-pattern">{{ (block.input.pattern | default(''))[:80] }}</span>
+<span class="tool-widget-chevron">&#9654;</span>
+</summary>
+{% if block.result is defined and block.result %}<div class="tool-widget-body">{{ block.result }}</div>{% endif %}
+</details>
+
+{% elif tool_lower in ['webfetch', 'websearch'] %}
+<details class="tool-widget tool-web"{% if block.result is defined and block.result %} open{% endif %}>
+<summary class="tool-widget-header">
+<span class="tw-icon">{% if tool_lower == 'webfetch' %}&#127760;{% else %}&#128269;{% endif %}</span>
+<span class="tw-name">{{ 'WebFetch' if tool_lower == 'webfetch' else 'WebSearch' }}</span>
+<span class="tw-url">{{ (block.input.url | default(block.input.query | default('')))[:100] }}</span>
+<span class="tool-widget-chevron">&#9654;</span>
+</summary>
+{% if block.result is defined and block.result %}<div class="tool-widget-body">{{ block.result }}</div>{% endif %}
+</details>
+
+{% elif tool_lower in ['skill', 'agent', 'task', 'toolsearch'] %}
+<details class="tool-widget tool-agent"{% if block.result is defined and block.result %} open{% endif %}>
+<summary class="tool-widget-header">
+<span class="tw-icon">&#9889;</span>
+<span class="tw-name">{{ block.name | default('?') }}</span>
+{% if block.input is defined and block.input is mapping %}
+<span class="tool-widget-param">{% if block.input.skill is defined %}{{ block.input.skill }}{% elif block.input.query is defined %}{{ block.input.query }}{% endif %}</span>
+{% endif %}
+<span class="tool-widget-chevron">&#9654;</span>
+</summary>
+{% if block.result is defined and block.result %}<div class="tool-widget-body">{{ block.result }}</div>{% endif %}
+</details>
+
+{% else %}
+{# Fallback: generic tool-call style for unknown tools #}
+<details class="tool-call"{% if block.result is defined and block.result %} open{% endif %}>
+<summary class="tool-call-header">
+<span class="tool-call-icon">&#9881;&#65039;</span>
+<span class="tool-call-name">{{ block.name | default('?') }}</span>
+{% if block.input is defined and block.input is mapping %}
+<span class="tool-call-param">{% if block.name in ['Read', 'Edit', 'Write'] and block.input.file_path is defined %}{{ block.input.file_path }}{% elif block.name == 'Bash' and block.input.command is defined %}{{ block.input.command[:80] }}{% elif block.name in ['Grep', 'Glob'] and block.input.pattern is defined %}{{ block.input.pattern }}{% elif block.name == 'WebFetch' and block.input.url is defined %}{{ block.input.url[:80] }}{% elif block.name == 'ToolSearch' and block.input.query is defined %}{{ block.input.query }}{% elif block.name == 'WebSearch' and block.input.query is defined %}{{ block.input.query }}{% endif %}</span>
+{% endif %}
+<span class="tool-call-chevron">&#9654;</span>
+</summary>
+{% if block.result is defined and block.result %}<div class="tool-call-body">{{ block.result }}</div>{% endif %}
+</details>
+{% endif %}
+
+{% elif block.type == 'tool_result' %}
+{# Standalone tool result (orphan -- no matching tool_use found) #}
+<details class="tool-call" style="border-left:2px solid var(--success);">
+<summary class="tool-call-header">
+<span class="tool-call-icon">&#9664;</span>
+<span class="tool-call-name" style="color:var(--success);">Tool Result</span>
+<span class="tool-call-chevron">&#9654;</span>
+</summary>
+<div class="tool-call-body">{{ block.text }}</div>
+</details>
+
+{% elif block.type == 'user_message' %}
+{% set ns.had_user_message = true %}
+<div class="msg-card msg-user">
+<div class="msg-icon">U</div>
+<div class="msg-content"><div class="md-render">{{ block.text }}</div></div>
+</div>
+
+{% elif block.type == 'error' %}
+<div class="msg-card msg-system">
+<div class="msg-icon" style="background:var(--danger-dim); color:var(--danger);">&#10007;</div>
+<div class="msg-content" style="color:var(--danger);">{{ block.text }}</div>
+</div>
+
+{% elif block.type == 'ask_question' %}
+<div class="msg-card msg-assistant">
+<div class="msg-icon">&#10067;</div>
+<div class="msg-content"><div class="md-render">{{ block.text }}</div></div>
+</div>
+
+{% elif block.type == 'permission' %}
+<div class="msg-card msg-system">
+<div class="msg-icon">&#128274;</div>
+<div class="msg-content">Awaiting approval: {{ block.tool }}</div>
+</div>
+
+{% endif %}
+{% set ns.last_type = block.type %}
+{% endfor %}
+{% if not blocks %}<span class="text-muted">{% if is_running %}No output yet.{% else %}No output recorded.{% endif %}</span>{% endif %}
+{% endif %}

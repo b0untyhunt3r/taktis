@@ -1,0 +1,37 @@
+services:
+  taktis:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persistent database (survives container restarts).
+      # The Dockerfile sets TAKTIS_DATABASE_URL to /app/data/taktis.db.
+      - taktis-data:/app/data
+
+      # Container-local Claude Code auth. Log in once inside the container
+      # with `docker compose exec taktis claude login`; the OAuth tokens are
+      # written to this named volume and persist across restarts.
+      # Fully decoupled from the host — no ~/.claude mount needed.
+      - claude-auth:/root/.claude
+
+      # Default working-directory root for projects created inside taktis.
+      # Override with PROJECTS_DIR to point elsewhere on the host.
+      - ${PROJECTS_DIR:-./projects}:/projects:rw
+
+      # Alternative: reuse your HOST's existing Claude Code login instead of
+      # logging in separately inside the container. Useful if you're on a
+      # Claude Max/Pro subscription and want to share that session. Uncomment
+      # the next line AND comment out the `claude-auth:/root/.claude` mount
+      # above. Compose expands $HOME on Linux/macOS; on Windows set
+      # CLAUDE_CONFIG_DIR=%USERPROFILE%\.claude before running.
+      # - ${CLAUDE_CONFIG_DIR:-$HOME/.claude}:/root/.claude:rw
+    environment:
+      # Headless auth: set this in .env to skip `claude login` entirely.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    restart: unless-stopped
+
+volumes:
+  taktis-data:
+  claude-auth:

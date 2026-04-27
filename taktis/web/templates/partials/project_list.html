@@ -1,0 +1,50 @@
+{% if projects %}
+<style>
+  .project-row { cursor: pointer; transition: all 150ms ease; }
+  .project-row:hover { background: var(--bg-elevated); transform: translateX(2px); }
+  .project-row td:first-child { font-weight: 600; }
+  .project-row td:first-child a { color: var(--text); text-decoration: none; }
+  .project-row td:first-child a:hover { color: var(--accent); }
+  .project-name-cell { display: inline-flex; align-items: center; gap: 0.5rem; }
+  .project-active-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse-dot 2s ease-in-out infinite; flex-shrink: 0; }
+</style>
+<div class="panel">
+  <h2>All Projects</h2>
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Status</th>
+          <th>Phases</th>
+          <th>Tasks</th>
+          <th>Created</th>
+          <th>Working Dir</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for project in projects %}
+        <tr class="project-row" onclick="window.location='/projects/{{ project.name }}'">
+          <td>
+            <span class="project-name-cell">
+              {% if project.project_status in ['in_progress', 'running'] %}<span class="project-active-dot" title="Active"></span>{% endif %}
+              <a href="/projects/{{ project.name }}">{{ project.name }}</a>
+            </span>
+          </td>
+          <td><span class="badge badge-{{ project.project_status | default('idle') }}">{{ project.project_status | default('idle') }}</span></td>
+          <td>{{ project.phase_count | default(0) }}</td>
+          <td>{{ project.task_count | default(0) }}</td>
+          <td>{{ project.created_at | dt }}</td>
+          <td><code class="text-muted">{{ project.working_dir | default('—') }}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="panel" style="text-align:center; padding:3rem;">
+  <div class="text-muted" style="margin-bottom:0.75rem;">No projects yet.</div>
+  <button class="btn btn-success" onclick="toggleNewProjectForm()">Create your first project</button>
+</div>
+{% endif %}

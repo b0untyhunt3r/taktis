@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Taktis{% endblock %}
+
+{% block content %}
+<style>
+  .active-task-row { transition: all 150ms ease; }
+  .active-task-row:hover { background: var(--bg-elevated) !important; }
+</style>
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem;">
+  <h1 style="margin-bottom:0;">Dashboard</h1>
+  <a href="/projects" class="btn btn-success" style="text-decoration:none; color:#fff; font-size:0.82rem; display:inline-flex; align-items:center; gap:0.35rem;">+ New Project</a>
+</div>
+
+<!-- Interrupted Work Warning -->
+{% if interrupted and interrupted.phases %}
+<div class="panel" style="border-left: 3px solid #e67e22; background: rgba(230,126,34,0.07); margin-bottom: 1rem;">
+  <div class="panel-header" style="padding-bottom: 0.5rem;">
+    <h2 style="color: #e67e22; font-size: 1rem;">&#9888; Interrupted Work</h2>
+    <span class="text-muted" style="font-size: 0.8rem;">These operations were interrupted and can be resumed</span>
+  </div>
+  <div style="margin-bottom: 0.75rem;">
+    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.4rem;">Interrupted phases:</p>
+    <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.35rem;">
+      {% for item in interrupted.phases %}
+      <li style="display: flex; align-items: center; gap: 0.6rem; font-size: 0.9rem;">
+        <span class="badge badge-interrupted">Interrupted</span>
+        Phase <strong>{{ item.name }}</strong> in project
+        <a href="/projects/{{ item.project_name }}">{{ item.project_name }}</a>
+        <button class="btn-sm" style="margin-left: auto;"
+                hx-post="/api/phases/{{ item.id }}/resume"
+                hx-swap="none"
+                title="Resume this interrupted phase">Resume</button>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<!-- Status Cards -->
+<div id="status-cards"
+     hx-get="/partials/status-cards"
+     hx-trigger="load, sse:status-change from:#toast-area, every 30s"
+     hx-target="#status-cards"
+     hx-swap="innerHTML">
+  <div class="cards">
+    <div class="card"><div class="card-header"><span class="card-label">Projects</span></div><span class="card-value">—</span></div>
+    <div class="card accent"><div class="card-header"><span class="card-label">Running</span></div><span class="card-value">—</span></div>
+    <div class="card success"><div class="card-header"><span class="card-label">Completed</span></div><span class="card-value">—</span></div>
+    <div class="card danger"><div class="card-header"><span class="card-label">Failed</span></div><span class="card-value">—</span></div>
+  </div>
+</div>
+
+<!-- Active Tasks -->
+<div class="panel">
+  <div class="panel-header">
+    <h2>Active Tasks</h2>
+    <button class="btn-danger btn-sm"
+            hx-post="/api/stop-all"
+            hx-confirm="Stop all tasks?"
+            hx-swap="none"
+            id="stop-all-btn">
+      Stop All
+    </button>
+  </div>
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Task ID</th>
+          <th>Status</th>
+          <th>Wave</th>
+          <th>Expert</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody id="active-tasks"
+             hx-get="/partials/active-tasks"
+             hx-trigger="load, sse:status-change from:#toast-area, every 30s"
+             hx-swap="innerHTML">
+        <tr><td colspan="5" class="text-muted" style="text-align:center; padding:2rem;">Loading&hellip;</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Recent Events -->
+<div class="panel">
+  <div class="panel-header">
+    <h2>Recent Events</h2>
+    <span style="font-size:0.7rem; color:var(--success); display:inline-flex; align-items:center; gap:0.35rem;">
+      <span style="width:6px; height:6px; border-radius:50%; background:var(--success); animation: pulse-dot 2s ease-in-out infinite;"></span>
+      Live
+    </span>
+  </div>
+  <div class="event-feed"
+       id="event-feed"
+       hx-ext="sse"
+       sse-connect="/events"
+       sse-swap="message"
+       hx-swap="afterbegin">
+    {% if recent_events %}
+      {% for ev in recent_events %}
+        {% set ts = (ev.completed_at or ev.started_at)[:19] %}
+        {% if ev.status == 'completed' %}
+          <div class="event"><span class="event-time">{{ ts }}</span> (+) Task <a href="/tasks/{{ ev.id }}">{{ ev.id[:8] }}</a> completed{% if ev.cost_usd %} ${{ '%.4f' | format(ev.cost_usd) }}{% endif %}</div>
+        {% elif ev.status == 'failed' %}
+          <div class="event"><span class="event-time">{{ ts }}</span> (!) Task <a href="/tasks/{{ ev.id }}">{{ ev.id[:8] }}</a> failed</div>
+        {% elif ev.status == 'awaiting_input' %}
+          <div class="event"><span class="event-time">{{ ts }}</span> (?) Task <a href="/tasks/{{ ev.id }}">{{ ev.id[:8] }}</a> awaiting input</div>
+        {% else %}
+          <div class="event"><span class="event-time">{{ ts }}</span> (*) Task <a href="/tasks/{{ ev.id }}">{{ ev.id[:8] }}</a> {{ ev.status }}</div>
+        {% endif %}
+      {% endfor %}
+    {% else %}
+      <div class="event" style="text-align:center; padding:2rem 1rem;">
+        <div style="color:var(--text-muted); font-size:0.82rem;">Listening for events...</div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

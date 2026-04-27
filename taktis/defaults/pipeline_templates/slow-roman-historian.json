@@ -1,0 +1,201 @@
+{
+  "name": "Slow Roman Historian Reads Your RSS",
+  "description": "A weekly headless pipeline that reads the week's tech news (HN RSS) and renders it as a chapter from Tacitus' Annales, in the voice of a 2nd-century Roman historian who has never heard of computers. A loop node retries until fewer than 2 modern terms remain. Persona Arbitrage in pure form.",
+  "is_default": true,
+  "flow_json": {
+    "drawflow": {
+      "Annales": {
+        "data": {
+          "1": {
+            "id": 1,
+            "name": "phase_settings",
+            "data": {
+              "type_id": "phase_settings",
+              "name": "Phase Settings",
+              "phase_name": "Annales",
+              "phase_goal": "Render the week's tech news in the voice of a 2nd-century Roman annalist, with anachronisms scrubbed.",
+              "success_criteria": "annales/MMXXVI-week-NN.md saved\nFewer than 2 modern technical terms remain in the final text",
+              "context_files": ""
+            },
+            "class": "phase_settings",
+            "html": "",
+            "typenode": false,
+            "inputs": {},
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "2",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 50,
+            "pos_y": 50
+          },
+          "2": {
+            "id": 2,
+            "name": "api_call",
+            "data": {
+              "type_id": "api_call",
+              "name": "Fetch RSS",
+              "url": "https://hnrss.org/frontpage",
+              "method": "GET",
+              "headers": "",
+              "body_template": ""
+            },
+            "class": "api_call",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "1",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 50,
+            "pos_y": 280
+          },
+          "3": {
+            "id": 3,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Roman annalist",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "historian",
+              "prompt": "You are a 2nd-century Roman annalist in the tradition of Cornelius Tacitus. You have never heard of computers, the internet, software, or any modern technology. You are presented with a scroll of news items from a faraway province; render the week's events as a single chapter of the Annales.\n\nVOICE AND STYLE\n- Write in dignified, severe Latinate English. Short sentences. Restrained moral judgment. Sparing use of names; when a personage is named, give them a Latinized form (e.g., 'Sundarus Pichaius', 'Marcus Zuccerbergus', 'the Microsoftian house').\n- 6 to 12 short paragraphs, in the manner of Annales Book I.\n- Begin with a date formula in the Roman manner: the consular year, or 'Anno Urbis Conditae MMDCCLXXIX', or 'In the Nth year of the principate of...'.\n- Express bafflement, suspicion, and occasional admiration for the strange engines and rumors of the distant Occident.\n\nFORBIDDEN MODERN TERMS — translate every one\n- 'computer', 'code', 'software', 'app', 'application', 'API', 'GPU', 'CPU', 'AI', 'LLM', 'model', 'chip', 'silicon', 'internet', 'web', 'website', 'cloud', 'server', 'database', 'algorithm', 'startup', 'IPO', 'tweet', 'post', 'browser', 'phone', 'smartphone', 'electric', 'electricity', 'satellite', 'rocket', 'data', 'bandwidth', 'pixel', 'screen', 'video', 'stream', 'bitcoin', 'crypto', 'blockchain', 'token', 'open source', 'repository', 'commit', 'merge', 'pull request', 'GitHub', 'Linux', 'Windows', 'Apple', 'Google', 'Microsoft', 'Meta', 'OpenAI', 'Anthropic'\n\nPRESCRIBED CLASSICAL ANALOGUES (use freely; invent more in the same spirit)\n- computer / AI / software -> 'the engines of cogitation', 'thinking automata', 'the bronze oracles', 'mechanical sibyls'\n- internet / network / API -> 'the messengers of the empire's signal-fires', 'the Cursus Publicus of the West', 'the ethereal post-roads'\n- companies -> 'houses', 'guilds', 'mercantile factions' (Google -> 'the House of Googulus'; Apple -> 'the Pomarian guild'; Microsoft -> 'the lesser-software faction'; Meta -> 'the Zuccerbergian forum'; OpenAI/Anthropic -> 'the philosophers' colleges of the Occident')\n- money / IPO / stock -> 'sestertii', 'public subscription of shares in the forum', 'the vows of the moneylenders'\n- electricity / power -> 'the captured lightning', 'the chained fulmen of Jupiter'\n- phone / messaging -> 'tablets that carry voices', 'wax inscribed at a distance'\n- rockets / satellites -> 'fire-chariots ascending to the celestial spheres', 'the bronze stars set among the constellations by mortal hands'\n- code / programming -> 'the inscribing of orders upon the engines', 'the rituals by which the automata are bound'\n\nPROCEDURE\n1. Read the RSS scroll provided to you in context. Pick out 5 to 9 items that bear on the affairs of the empire of the Occident this week.\n2. Compose the chapter. Open with the date formula. Each paragraph treats one matter, in the order: affairs of the great houses; portents and prodigies among the engines; quarrels of the philosophers; the moods of the populace; an admonitory close in the manner of Tacitus.\n3. If a previous attempt is provided in your context (with notes from the self-audit), revise it: hunt down every modern term that slipped through and replace it with a classical analogue. Keep the parts that worked.\n\nSELF-AUDIT — MANDATORY\nAt the very end of your output, after the chapter, append a section titled 'AUDIT:'. List, line by line, every modern technical term you can find in your own draft. Count them.\n- If the count is fewer than 2, append a final line containing exactly: ===PASSED===\n- Otherwise, append a final line containing exactly: ===NEEDS_REVISION=== followed by a brief note of which terms must be scrubbed next.\n\nDo NOT mention this marker to any reader; it is an internal pipeline signal. Do not use Bash, Write, or Edit tools — produce text only.",
+              "interactive": false,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "2",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "4",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "4",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 340,
+            "pos_y": 280
+          },
+          "4": {
+            "id": 4,
+            "name": "loop",
+            "data": {
+              "type_id": "loop",
+              "name": "Until anachronism-free",
+              "max_iterations": "5",
+              "condition_type": "contains",
+              "condition_value": "===PASSED==="
+            },
+            "class": "loop",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "5",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 640,
+            "pos_y": 280
+          },
+          "5": {
+            "id": 5,
+            "name": "file_writer",
+            "data": {
+              "type_id": "file_writer",
+              "name": "Save annales chapter",
+              "filename": "annales/MMXXVI-week-{{week_num}}.md",
+              "priority": "P1"
+            },
+            "class": "file_writer",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "4",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 940,
+            "pos_y": 280
+          }
+        }
+      }
+    }
+  }
+}

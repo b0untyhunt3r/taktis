@@ -1,0 +1,31 @@
+<div class="cards">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-label">Projects</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted)"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+    </div>
+    <span class="card-value">{{ status.projects }}</span>
+  </div>
+  {% set running_count = status.running_processes or status.tasks.running or 0 %}
+  <div class="card{% if running_count %} accent{% endif %}">
+    <div class="card-header">
+      <span class="card-label">Running</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    </div>
+    <span class="card-value">{{ running_count }}</span>
+  </div>
+  <div class="card success">
+    <div class="card-header">
+      <span class="card-label">Completed</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--success)"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    </div>
+    <span class="card-value">{{ status.tasks.completed or 0 }}</span>
+  </div>
+  <div class="card{% if status.tasks.failed %} danger{% endif %}">
+    <div class="card-header">
+      <span class="card-label">Failed</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--danger)"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    </div>
+    <span class="card-value">{{ status.tasks.failed or 0 }}</span>
+  </div>
+</div>

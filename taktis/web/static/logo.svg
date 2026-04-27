@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#lg)"/>
+  <!-- T mark — white on indigo -->
+  <rect x="112" y="120" width="288" height="56" rx="28" fill="#fff"/>
+  <rect x="228" y="120" width="56" height="272" rx="28" fill="#fff"/>
+  <!-- Pipeline nodes -->
+  <circle cx="156" cy="332" r="20" fill="#fff" opacity="0.4"/>
+  <circle cx="256" cy="416" r="20" fill="#fff" opacity="0.55"/>
+  <circle cx="356" cy="332" r="20" fill="#fff" opacity="0.4"/>
+</svg>

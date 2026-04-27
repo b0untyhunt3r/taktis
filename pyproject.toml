@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "taktis"
+version = "0.1.0"
+description = "Multi-agent task orchestration for Claude Code with visual pipeline designer and web UI"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "taktis contributors" },
+]
+keywords = ["claude", "taktis", "multi-agent", "pipeline", "ai"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Framework :: AsyncIO",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "claude-agent-sdk",
+    "starlette",
+    "uvicorn[standard]",
+    "python-multipart",
+    "pydantic",
+    "pydantic-settings",
+    "pyyaml",
+    "aiosqlite",
+    "httpx",
+    "click",
+    "python-dotenv",
+    "jsonschema",
+    "jinja2",
+    "markupsafe",
+    "sse-starlette",
+    "mcp",
+    "rpds-py",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[project.scripts]
+taktis = "run:main"
+
+[project.urls]
+Homepage = "https://github.com/b0untyhunt3r/taktis"
+Repository = "https://github.com/b0untyhunt3r/taktis"
+Issues = "https://github.com/b0untyhunt3r/taktis/issues"
+
+[tool.setuptools.packages.find]
+include = ["taktis*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

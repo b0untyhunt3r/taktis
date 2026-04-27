@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Agent Templates — Taktis{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb">
+  <a href="/">Dashboard</a> <span class="sep">/</span>
+  <span class="current">Agent Templates</span>
+</nav>
+<h1>Agent Templates</h1>
+
+<details class="panel" style="margin-bottom:1.5rem;">
+  <summary style="cursor:pointer; color:var(--accent); font-size:0.9rem; font-weight:600;">+ Create Custom Template</summary>
+  <form hx-post="/api/agent-templates" hx-swap="none" style="margin-top:1rem;">
+    <div class="form-row">
+      <div>
+        <label for="new_slug">Slug (unique key)</label>
+        <input type="text" id="new_slug" name="slug" required placeholder="MY_CUSTOM_TEMPLATE"
+               pattern="[A-Z0-9_]+" title="Uppercase letters, digits, underscores only">
+      </div>
+      <div>
+        <label for="new_name">Display Name</label>
+        <input type="text" id="new_name" name="name" required placeholder="My Custom Template">
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="new_desc">Description</label>
+      <input type="text" id="new_desc" name="description" placeholder="What this template does">
+    </div>
+    <div class="form-group">
+      <label for="new_prompt">Prompt Text</label>
+      <textarea id="new_prompt" name="prompt_text" style="min-height:200px; font-family:monospace; font-size:0.85rem;"
+                placeholder="Use {variable_name} for template variables..."></textarea>
+    </div>
+    <div class="form-row">
+      <div>
+        <label for="new_auto">Auto-injected Variables</label>
+        <input type="text" id="new_auto" name="auto_variables" placeholder="description, expert_options"
+               style="font-family:monospace; font-size:0.85rem;">
+        <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.2rem;">Comma-separated. These are injected automatically via checkboxes.</div>
+      </div>
+      <div>
+        <label for="new_internal">Internal Variables</label>
+        <input type="text" id="new_internal" name="internal_variables" placeholder="issues, previous_plan_text"
+               style="font-family:monospace; font-size:0.85rem;">
+        <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.2rem;">Comma-separated. System-injected (hidden from variable mapping UI).</div>
+      </div>
+    </div>
+    <button type="submit" class="btn-success" style="margin-top:0.5rem;">Create Template</button>
+  </form>
+</details>
+
+{% set builtins = agent_templates | selectattr('is_builtin') | list %}
+{% set customs = agent_templates | rejectattr('is_builtin') | list %}
+
+{% if customs %}
+<div style="margin-bottom:2rem;">
+  <div style="display:flex; align-items:baseline; gap:0.75rem; margin-bottom:0.75rem;">
+    <h2 style="margin:0; color:var(--accent); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em;">Custom</h2>
+    <span class="pill" style="background:var(--accent); color:#fff; border-radius:999px; padding:0.1rem 0.5rem; font-size:0.75rem;">{{ customs | length }}</span>
+  </div>
+  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:0.75rem;">
+    {% for t in customs %}
+    <div class="panel" style="border-left:3px solid var(--accent); padding:0.75rem 1rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+        <strong>{{ t.name }}</strong>
+        <code style="font-size:0.75rem; opacity:0.6;">{{ t.slug }}</code>
+      </div>
+      <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.5rem;">{{ t.description or 'No description' }}</div>
+      {% set vars = _extract_vars(t.prompt_text) if _extract_vars else [] %}
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.5rem;">
+        {% for v in (t.auto_variables or []) %}
+        <span style="font-size:0.7rem; padding:0.1rem 0.4rem; border-radius:4px; background:rgba(99,102,241,0.15); color:var(--accent);">{{ v }} <span style="opacity:0.5;">auto</span></span>
+        {% endfor %}
+      </div>
+      <div style="display:flex; gap:0.5rem;">
+        <a href="/agent-templates/{{ t.slug }}/edit" class="btn" style="font-size:0.75rem; padding:0.25rem 0.5rem;">Edit</a>
+        <form hx-post="/api/agent-templates/{{ t.slug }}/delete" hx-swap="none" hx-confirm="Delete template '{{ t.name }}'?"
+              style="display:inline;">
+          <button type="submit" class="btn-danger" style="font-size:0.75rem; padding:0.25rem 0.5rem;">Delete</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div>
+  <div style="display:flex; align-items:baseline; gap:0.75rem; margin-bottom:0.75rem;">
+    <h2 style="margin:0; color:#10b981; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em;">Built-in</h2>
+    <span class="pill" style="background:#10b981; color:#fff; border-radius:999px; padding:0.1rem 0.5rem; font-size:0.75rem;">{{ builtins | length }}</span>
+  </div>
+  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:0.75rem;">
+    {% for t in builtins %}
+    <div class="panel" style="border-left:3px solid #10b981; padding:0.75rem 1rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+        <strong>{{ t.name }}</strong>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          <code style="font-size:0.75rem; opacity:0.6;">{{ t.slug }}</code>
+          <span style="font-size:0.65rem; padding:0.1rem 0.3rem; border-radius:3px; background:rgba(16,185,129,0.2); color:#10b981; font-weight:600;">BUILTIN</span>
+        </div>
+      </div>
+      <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.5rem;">{{ t.description or 'No description' }}</div>
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.5rem;">
+        {% for v in (t.auto_variables or []) %}
+        <span style="font-size:0.7rem; padding:0.1rem 0.4rem; border-radius:4px; background:rgba(99,102,241,0.15); color:var(--accent);">{{ v }} <span style="opacity:0.5;">auto</span></span>
+        {% endfor %}
+        {% for v in (t.internal_variables or []) %}
+        <span style="font-size:0.7rem; padding:0.1rem 0.4rem; border-radius:4px; background:rgba(239,68,68,0.15); color:#ef4444;">{{ v }} <span style="opacity:0.5;">internal</span></span>
+        {% endfor %}
+      </div>
+      <details style="margin-top:0.25rem;">
+        <summary style="font-size:0.75rem; cursor:pointer; color:var(--text-muted);">Preview prompt ({{ t.prompt_text | length }} chars)</summary>
+        <pre style="font-size:0.7rem; max-height:300px; overflow:auto; white-space:pre-wrap; margin-top:0.5rem; padding:0.5rem; background:var(--code-bg); border-radius:4px;">{{ t.prompt_text }}</pre>
+      </details>
+      <div style="margin-top:0.5rem;">
+        <a href="/agent-templates/{{ t.slug }}/edit" class="btn" style="font-size:0.75rem; padding:0.25rem 0.5rem;">View / Edit</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

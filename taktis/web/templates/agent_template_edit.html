@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ tmpl.name }} — Taktis{% endblock %}
+
+{% block content %}
+<style>
+#edit_prompt:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+</style>
+<nav class="breadcrumb">
+  <a href="/">Dashboard</a> <span class="sep">/</span>
+  <a href="/agent-templates">Agent Templates</a> <span class="sep">/</span>
+  <span class="current">Edit {{ tmpl.name }}</span>
+</nav>
+<h1>Edit Template: {{ tmpl.name }}</h1>
+
+<div class="panel">
+  {% if tmpl.is_builtin %}
+  <p class="text-muted mb-1">This is a built-in template. Changes will persist until the database is reset.</p>
+  {% endif %}
+
+  <form hx-post="/api/agent-templates/{{ tmpl.slug }}/edit" hx-swap="none">
+    <div class="form-row">
+      <div>
+        <label>Slug</label>
+        <input type="text" value="{{ tmpl.slug }}" disabled style="opacity:0.5; font-family:monospace;">
+      </div>
+      <div>
+        <label for="edit_name">Display Name</label>
+        <input type="text" id="edit_name" name="name" value="{{ tmpl.name }}">
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="edit_desc">Description</label>
+      <input type="text" id="edit_desc" name="description" value="{{ tmpl.description | default('') }}">
+    </div>
+    <div class="form-group">
+      <label for="edit_prompt">Prompt Text</label>
+      <textarea id="edit_prompt" name="prompt_text"
+                style="min-height:400px; font-family:monospace; font-size:0.82rem; line-height:1.5;">{{ tmpl.prompt_text | default('') }}</textarea>
+    </div>
+    <div class="form-row">
+      <div>
+        <label for="edit_auto">Auto-injected Variables</label>
+        <input type="text" id="edit_auto" name="auto_variables"
+               value="{{ (tmpl.auto_variables or []) | join(', ') }}"
+               style="font-family:monospace; font-size:0.85rem;">
+        <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.2rem;">Comma-separated. Injected via checkboxes (inject_description, inject_expert_options).</div>
+      </div>
+      <div>
+        <label for="edit_internal">Internal Variables</label>
+        <input type="text" id="edit_internal" name="internal_variables"
+               value="{{ (tmpl.internal_variables or []) | join(', ') }}"
+               style="font-family:monospace; font-size:0.85rem;">
+        <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.2rem;">Comma-separated. System-injected (hidden from variable mapping UI).</div>
+      </div>
+    </div>
+    <div style="display:flex; gap:0.75rem; margin-top:0.75rem;">
+      <button type="submit" class="btn-success">Save Changes</button>
+      <a href="/agent-templates" class="btn" style="text-decoration:none; display:inline-flex; align-items:center;">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

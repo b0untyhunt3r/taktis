@@ -1,0 +1,354 @@
+{
+  "name": "Recursive Argument Engine",
+  "description": "A daily dialectical loop. Reads manifesto.md, identifies yesterday's strongest claim, runs three parallel critiques (philosophical attack, rhetorical defense, anthropological dissolution), and writes today's synthesis. The synthesis seeds tomorrow's run, so a 30-day cycle becomes a document that argues itself somewhere unrecognizable.",
+  "is_default": true,
+  "flow_json": {
+    "drawflow": {
+      "Dialectic": {
+        "data": {
+          "1": {
+            "id": 1,
+            "name": "phase_settings",
+            "data": {
+              "type_id": "phase_settings",
+              "name": "Phase Settings",
+              "phase_name": "Dialectic",
+              "phase_goal": "Submit yesterday's strongest claim from manifesto.md to a three-way critique (attack / defend / dissolve) and synthesize today's evolution.",
+              "success_criteria": "manifesto.md updated with a new section dated today\nThree distinct critique voices preserved",
+              "context_files": "manifesto.md"
+            },
+            "class": "phase_settings",
+            "html": "",
+            "typenode": false,
+            "inputs": {},
+            "outputs": {},
+            "pos_x": 50,
+            "pos_y": 50
+          },
+          "2": {
+            "id": 2,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Identify yesterday's strongest claim",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "evidence-collector",
+              "prompt": "You have access to manifesto.md in your context (.taktis/ context files).\n\nRead it carefully. Identify the SINGLE sharpest, most load-bearing claim made in yesterday's section (the most recent dated section). If there is no prior section yet (day 1), pick the strongest claim from the seed text or, if the file is empty, propose one foundational claim about the project's stated purpose.\n\nOutput ONLY:\n\nCLAIM: <the claim, verbatim or as a single tight sentence if paraphrasing is unavoidable>\nWHY: <one sentence explaining why this is the strongest claim — what it is doing structurally in the argument>\n\nNo preamble. No markdown. No tools needed beyond reading the file. Do not write or edit anything.",
+              "interactive": false,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": []
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "4",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "5",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 50,
+            "pos_y": 280
+          },
+          "3": {
+            "id": 3,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Philosopher attacks",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "psychologist",
+              "prompt": "You are a philosopher in the analytic tradition. The upstream output contains a CLAIM and a brief WHY.\n\nMount the strongest possible counter-argument FROM FIRST PRINCIPLES. Do not be polite. Find the hidden premise, the equivocation, the smuggled-in assumption, or the category error. If the claim is empirical, attack its evidential basis. If it is normative, attack its grounding. If it is conceptual, attack its coherence.\n\nConstraints:\n- 200 words MAX. Hard limit.\n- No preamble, no \"In this response I will...\". Just the attack.\n- Do not concede. Do not hedge. Steelman the opposing view as forcefully as you can.\n- Do not use file-modifying tools. Output text only.",
+              "interactive": false,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "2",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "6",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 340,
+            "pos_y": 100
+          },
+          "4": {
+            "id": 4,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Rhetorician defends",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "narrative-designer",
+              "prompt": "You are a rhetorician trained in the classical art of defense. The upstream output contains a CLAIM and a brief WHY.\n\nDefend the claim using rhetorical and narrative force. Identify what an attacker would MISS — the felt truth, the lived consequence, the narrative arc that makes the claim resonant rather than merely correct. Use ethos, pathos, and logos in that order of priority.\n\nThen, in your final sentence, name the single strongest objection you anticipate and explain why it fails on its own terms.\n\nConstraints:\n- 200 words MAX. Hard limit.\n- No preamble. Begin with the defense itself.\n- Do not concede the central claim, though you may grant minor points to gain ground.\n- Do not use file-modifying tools. Output text only.",
+              "interactive": false,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "2",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "6",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 340,
+            "pos_y": 280
+          },
+          "5": {
+            "id": 5,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Anthropologist dissolves",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "anthropologist",
+              "prompt": "You are an anthropologist. The upstream output contains a CLAIM and a brief WHY.\n\nDo not attack or defend the claim. Instead, question whether its FRAMING imports cultural assumptions — about the self, time, agency, value, knowledge, or what counts as evidence — that another culture or era would simply not recognize. Show how the dichotomy or opposition the claim depends on may be parochial.\n\nThen, REFRAME the underlying concern so the dichotomy disappears. The reframing should make the original argument look like a category error rather than a settled question.\n\nConstraints:\n- 200 words MAX. Hard limit.\n- No preamble. Begin with the cultural genealogy.\n- Be ethnographically specific where possible — name a tradition, a counter-example, a comparative case.\n- Do not use file-modifying tools. Output text only.",
+              "interactive": false,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "2",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "6",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 340,
+            "pos_y": 460
+          },
+          "6": {
+            "id": 6,
+            "name": "aggregator",
+            "data": {
+              "type_id": "aggregator",
+              "name": "Today's synthesis",
+              "strategy": "xml_wrap",
+              "separator": "\n"
+            },
+            "class": "aggregator",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "4",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "5",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "7",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 640,
+            "pos_y": 280
+          },
+          "7": {
+            "id": 7,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Synthesis writer",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "book-co-author",
+              "prompt": "Upstream you have three critiques wrapped in XML tags (the attack, the defense, the dissolution) of a single claim drawn from yesterday's manifesto.md.\n\nYour task: write TODAY'S synthesis as a single dated section that will be appended to manifesto.md.\n\nFORMAT — output EXACTLY this structure and nothing else:\n\n# Today's synthesis — <YYYY-MM-DD using today's actual date>\n\nClaim under examination: <one tight sentence naming the claim, paraphrased — DO NOT quote it verbatim from yesterday's section>\n\n<250 words of synthesis prose>\n\nHARD RULES for the 250-word body:\n- DO NOT repeat the claim verbatim. The synthesis MUST advance the conversation.\n- DO NOT merely summarize the three critiques. Take a position the three voices, on their own, did not reach.\n- The synthesis MUST end on a NEW claim — sharper, stranger, or more committed than yesterday's — that tomorrow's run can attack. State it as a single declarative sentence in the final paragraph.\n- 250 words is a HARD ceiling. Aim for 230-250.\n- No bullet points. No headers within the body. Continuous prose.\n- Do not use file-modifying tools yourself — your output is the file content; the next node writes it.",
+              "interactive": false,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "6",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "8",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 940,
+            "pos_y": 280
+          },
+          "8": {
+            "id": 8,
+            "name": "file_writer",
+            "data": {
+              "type_id": "file_writer",
+              "name": "Append to manifesto",
+              "filename": "manifesto.md",
+              "source_section": "",
+              "context_priority": "P0 — must include"
+            },
+            "class": "file_writer",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "7",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 1240,
+            "pos_y": 280
+          }
+        }
+      }
+    }
+  }
+}

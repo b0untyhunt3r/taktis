@@ -1,0 +1,37 @@
+__pycache__/
+*.pyc
+*.pyo
+taktis.db
+taktis.db-shm
+taktis.db-wal
+.taktis/
+.orchestrator/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.playwright-mcp/
+server.log
+*.png
+!docs/screenshots/*.png
+!docs/*.png
+
+# Machine-specific
+docs/ERROR_HANDLING.md
+.claude/
+.env
+.env.local
+.env.*.local
+config.yaml
+.venv/
+tmp/
+start.bat
+start.sh
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db

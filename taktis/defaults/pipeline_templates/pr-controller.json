@@ -1,0 +1,434 @@
+{
+  "name": "PR Controller",
+  "description": "Scheduled triage of open GitHub PRs. Fans out across PRs, classifies each by diff signature, routes to a specialist reviewer (database-optimizer, security-engineer, performance-benchmarker, or accessibility-auditor), aggregates findings into a dated triage report. Headless and cron-safe.",
+  "is_default": true,
+  "flow_json": {
+    "drawflow": {
+      "Triage": {
+        "data": {
+          "1": {
+            "id": 1,
+            "name": "phase_settings",
+            "data": {
+              "type_id": "phase_settings",
+              "name": "Phase Settings",
+              "phase_name": "Triage",
+              "phase_goal": "Triage open PRs by risk and route reviews to the right specialist persona.",
+              "success_criteria": "Open PRs fetched from GitHub\nEach PR classified by diff signature\nEach PR reviewed by the matching specialist persona\nDated triage report written to pr-triage/",
+              "context_files": ""
+            },
+            "class": "phase_settings",
+            "html": "",
+            "typenode": false,
+            "inputs": {},
+            "outputs": {},
+            "pos_x": 50,
+            "pos_y": 50
+          },
+          "2": {
+            "id": 2,
+            "name": "api_call",
+            "data": {
+              "type_id": "api_call",
+              "name": "Fetch open PRs",
+              "url": "https://api.github.com/repos/${GH_REPO}/pulls?state=open&per_page=20",
+              "method": "GET",
+              "headers": "{\"Accept\":\"application/vnd.github+json\",\"Authorization\":\"Bearer ${GH_TOKEN}\"}",
+              "body_template": ""
+            },
+            "class": "api_call",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": []
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 50,
+            "pos_y": 280
+          },
+          "3": {
+            "id": 3,
+            "name": "fan_out",
+            "data": {
+              "type_id": "fan_out",
+              "name": "PRs in parallel",
+              "prompt": "One PR per item.",
+              "item_separator": "\n---\n",
+              "model": "haiku"
+            },
+            "class": "fan_out",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "2",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "4",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 340,
+            "pos_y": 280
+          },
+          "4": {
+            "id": 4,
+            "name": "llm_router",
+            "data": {
+              "type_id": "llm_router",
+              "name": "Classify by diff signature",
+              "routing_prompt": "Classify the PR (title, description, and changed files) into exactly one route based on what it primarily touches.\n\nRoutes:\n- Route 1: DB / migrations \u00e2\u20ac\u201d schema changes, ALTER TABLE, new migrations, index changes, ORM model edits affecting persisted data.\n- Route 2: Auth / crypto / security \u00e2\u20ac\u201d authentication, authorization, token handling, password/credential code, encryption, signing, CORS, CSRF, session logic, anything in auth/security modules.\n- Route 3: Performance-sensitive paths \u00e2\u20ac\u201d hot loops, query builders, caching, batching, concurrency primitives, allocation-heavy code, render paths, code clearly on a critical performance path.\n- Route 4: Frontend / accessibility \u00e2\u20ac\u201d UI components, templates, CSS, ARIA, keyboard handlers, color/contrast, anything user-facing without backend impact.\n\nIf multiple routes apply, pick the one with the highest blast radius in the order: 1 > 2 > 3 > 4.\n\nRespond with ONLY the route number (1, 2, 3, or 4). Nothing else.",
+              "model": "haiku",
+              "route_count": "4"
+            },
+            "class": "llm_router",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "5",
+                    "output": "input_1"
+                  }
+                ]
+              },
+              "output_2": {
+                "connections": [
+                  {
+                    "node": "6",
+                    "output": "input_1"
+                  }
+                ]
+              },
+              "output_3": {
+                "connections": [
+                  {
+                    "node": "7",
+                    "output": "input_1"
+                  }
+                ]
+              },
+              "output_4": {
+                "connections": [
+                  {
+                    "node": "8",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 640,
+            "pos_y": 280
+          },
+          "5": {
+            "id": 5,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Migration safety review",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "database-optimizer",
+              "prompt": "You are reviewing a GitHub PR that primarily touches database schema, migrations, or persisted data. Do NOT modify any files. Produce a focused written review only.\n\nRead the PR title, description, and diff from context. Evaluate:\n- Lock contention risk: will this migration take exclusive locks on hot tables? Is it online-safe under load?\n- Irreversible operations: column drops, type narrowings, destructive backfills, missing rollback path.\n- Backfill plan: is there a backfill? Is it batched? Idempotent? Resumable on failure?\n- Index strategy: new indexes created concurrently? Unused indexes left behind? Cardinality assumptions sound?\n- Data integrity: NOT NULL added without default, FK changes, constraint timing, replication impact.\n- Migration ordering: safe deploy order (expand-then-contract) vs breaking the running app.\n\nOutput a markdown review with these sections:\n## PR Reference\n(PR number, title, author)\n## Risk Level\nP0 (block) | P1 (must fix before merge) | P2 (follow-up) | P3 (nit)\n## Findings\nNumbered list of concrete issues, each citing the relevant file/line where possible.\n## Recommended Actions\nConcrete next steps for the author.\n\nKeep it under 400 words. Be specific, no generic advice.",
+              "interactive": false,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "4",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "9",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 940,
+            "pos_y": 100
+          },
+          "6": {
+            "id": 6,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Security review",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "security-engineer",
+              "prompt": "You are reviewing a GitHub PR that primarily touches authentication, authorization, cryptography, or security-sensitive code. Do NOT modify any files. Produce a focused written review only.\n\nRead the PR title, description, and diff from context. Evaluate:\n- Token handling: storage, transport, rotation, scope, expiry. Anything ending up in logs, URLs, or client storage?\n- Injection surfaces: SQL, command, template, header, deserialization. Are inputs validated/escaped at the trust boundary?\n- Authentication changes: password hashing parameters, MFA logic, session fixation, cookie flags (HttpOnly, Secure, SameSite).\n- Authorization changes: new endpoints behind the right guard? IDOR risk? Privilege boundaries respected?\n- Crypto: algorithm choice, key length, IV/nonce reuse, constant-time comparisons, randomness source.\n- Secrets: hardcoded credentials, config leakage, dependency CVEs in added packages.\n\nOutput a markdown review with these sections:\n## PR Reference\n(PR number, title, author)\n## Risk Level\nP0 (block) | P1 (must fix before merge) | P2 (follow-up) | P3 (nit)\n## Findings\nNumbered list of concrete issues, each citing the relevant file/line where possible. Map each to a category (AuthN / AuthZ / Crypto / Injection / Secrets / Dependencies).\n## Recommended Actions\nConcrete next steps for the author.\n\nKeep it under 400 words. No generic OWASP boilerplate \u00e2\u20ac\u201d only what's actually in this diff.",
+              "interactive": false,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "4",
+                    "input": "output_2"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "9",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 940,
+            "pos_y": 280
+          },
+          "7": {
+            "id": 7,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Performance review",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "performance-benchmarker",
+              "prompt": "You are reviewing a GitHub PR that primarily touches performance-sensitive code paths. Do NOT modify any files. Produce a focused written review only.\n\nRead the PR title, description, and diff from context. Evaluate:\n- Hot paths: is this code on a per-request, per-frame, or per-tick path? Did the change increase work inside the hot loop?\n- Allocation: new allocations per call, boxing, defensive copies, unnecessary string concatenation, reused buffers vs fresh objects.\n- Algorithmic complexity: any O(n^2) lurking where O(n) was acceptable? Loops over loops over network/disk?\n- Query plans: new ORM queries \u00e2\u20ac\u201d N+1 risk, missing indexes, full scans, ORDER BY on unindexed columns, LIMIT pushdown.\n- Concurrency: lock granularity, contention, blocking calls inside async, executor sizing.\n- Caching / batching: opportunity missed or invalidation broken?\n\nOutput a markdown review with these sections:\n## PR Reference\n(PR number, title, author)\n## Risk Level\nP0 (block) | P1 (must fix before merge) | P2 (follow-up) | P3 (nit)\n## Findings\nNumbered list of concrete issues with file/line citations. Each finding states the expected impact (latency, throughput, allocations, query count).\n## Recommended Actions\nConcrete next steps, including any benchmark or profile the author should run before merge.\n\nKeep it under 400 words. Cite numbers where you can; otherwise say so.",
+              "interactive": false,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "4",
+                    "input": "output_3"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "9",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 940,
+            "pos_y": 460
+          },
+          "8": {
+            "id": 8,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "A11y review",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "accessibility-auditor",
+              "prompt": "You are reviewing a GitHub PR that primarily touches frontend / user-facing code. Do NOT modify any files. Produce a focused written review only.\n\nRead the PR title, description, and diff from context. Evaluate:\n- ARIA: semantic HTML preferred over ARIA; when ARIA is used, are roles, states, and properties correct? aria-label / aria-labelledby on icon-only controls?\n- Keyboard navigation: focus order, focus trap in modals, visible focus ring not removed, Esc/Enter handling, tabindex misuse.\n- Color and contrast: text vs background ratio (>=4.5:1 for body, 3:1 for large), color used as the only signal (state, errors).\n- Screen reader: alt text on meaningful images, empty alt on decorative, live regions for async updates, form labels associated to inputs.\n- Motion / timing: respect prefers-reduced-motion, no time-limited interactions without override.\n- Responsive / zoom: layout holds at 200% zoom, no horizontal scroll, target sizes meet 24x24 (or 44x44 mobile).\n\nOutput a markdown review with these sections:\n## PR Reference\n(PR number, title, author)\n## Risk Level\nP0 (block) | P1 (must fix before merge) | P2 (follow-up) | P3 (nit)\n## Findings\nNumbered list of concrete issues with file/line citations. Map each to a WCAG 2.2 success criterion where applicable.\n## Recommended Actions\nConcrete next steps for the author.\n\nKeep it under 400 words. Skip generic a11y advice not grounded in this diff.",
+              "interactive": false,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "4",
+                    "input": "output_4"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "9",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 940,
+            "pos_y": 640
+          },
+          "9": {
+            "id": 9,
+            "name": "aggregator",
+            "data": {
+              "type_id": "aggregator",
+              "name": "Combine reviews",
+              "mode": "numbered_list",
+              "separator": "\n\n---\n\n",
+              "header": "# PR Triage Summary\n"
+            },
+            "class": "aggregator",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "5",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "6",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "7",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "8",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "10",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 1240,
+            "pos_y": 370
+          },
+          "10": {
+            "id": 10,
+            "name": "file_writer",
+            "data": {
+              "type_id": "file_writer",
+              "name": "Write triage report",
+              "filename": "pr-triage/{{date}}.md",
+              "priority": "P1"
+            },
+            "class": "file_writer",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "9",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 1540,
+            "pos_y": 370
+          }
+        }
+      }
+    }
+  }
+}

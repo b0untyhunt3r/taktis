@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}Experts — Taktis{% endblock %}
+
+{% block content %}
+<style>
+.expert-search-bar {
+  position: sticky;
+  top: 56px; /* navbar height */
+  z-index: 50;
+  background: var(--bg);
+  padding: 0.75rem 0;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.expert-search-bar input {
+  max-width: 400px;
+}
+.expert-search-bar .search-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-left: 0.75rem;
+}
+</style>
+
+<nav class="breadcrumb">
+  <a href="/">Dashboard</a> <span class="sep">/</span>
+  <span class="current">Experts</span>
+</nav>
+<h1>Experts</h1>
+
+<div class="expert-search-bar">
+  <div style="display:flex; align-items:center;">
+    <input type="text" id="expert-search" placeholder="Search experts by name, category, or description..."
+           oninput="filterExperts(this.value)" autocomplete="off">
+    <span class="search-count" id="expert-search-count">{{ experts | length }} experts</span>
+  </div>
+</div>
+
+<!-- New Expert Form -->
+<div class="panel">
+  <details>
+    <summary style="cursor:pointer; color:var(--accent); font-size:0.9rem; font-weight:600;">+ Create Custom Expert</summary>
+    <form hx-post="/api/experts" hx-swap="none" style="margin-top:1rem;">
+      <div class="form-row">
+        <div>
+          <label for="expert_name">Name</label>
+          <input type="text" id="expert_name" name="name" required placeholder="my-expert">
+        </div>
+        <div>
+          <label for="expert_category">Category</label>
+          <select id="expert_category" name="category">
+            <option value="implementation" selected>implementation</option>
+            <option value="architecture">architecture</option>
+            <option value="review">review</option>
+            <option value="testing">testing</option>
+            <option value="devops">devops</option>
+            <option value="engineering">engineering</option>
+            <option value="marketing">marketing</option>
+            <option value="sales">sales</option>
+            <option value="design">design</option>
+            <option value="product">product</option>
+            <option value="paid-media">paid-media</option>
+            <option value="game-dev">game-dev</option>
+            <option value="academic">academic</option>
+            <option value="project-management">project-management</option>
+            <option value="specialized">specialized</option>
+            <option value="spatial-computing">spatial-computing</option>
+            <option value="support">support</option>
+            <option value="internal">internal</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="expert_desc">Description</label>
+        <input type="text" id="expert_desc" name="description" placeholder="Short description of this expert's role">
+      </div>
+      <div class="form-group">
+        <label for="expert_prompt">System Prompt</label>
+        <textarea id="expert_prompt" name="system_prompt" required
+                  placeholder="You are a ... expert. Your responsibilities include ..."
+                  style="min-height:150px;"></textarea>
+      </div>
+      <button type="submit">Create Expert</button>
+    </form>
+  </details>
+</div>
+
+{% set category_order = [
+  'engineering', 'architecture', 'implementation', 'review', 'testing', 'devops',
+  'marketing', 'sales', 'design', 'product', 'paid-media',
+  'game-dev', 'academic', 'project-management', 'specialized', 'spatial-computing',
+  'support', 'internal'
+] %}
+{% set category_descriptions = {
+  'engineering': 'Software engineering, backend, frontend, AI/ML, and DevOps specialists',
+  'architecture': 'System design, component structure, and API contracts',
+  'implementation': 'Writing, refactoring, and documenting code',
+  'review': 'Code review, security audit, plan verification, and accessibility',
+  'testing': 'Test planning, QA, performance benchmarking, and quality assurance',
+  'devops': 'CI/CD, deployment, monitoring, and infrastructure',
+  'marketing': 'Content creation, SEO, social media, and growth strategies',
+  'sales': 'Account strategy, discovery, proposals, and pipeline management',
+  'design': 'UI/UX design, brand identity, and visual storytelling',
+  'product': 'Product management, sprint planning, and trend research',
+  'paid-media': 'PPC, programmatic advertising, tracking, and ad creative',
+  'game-dev': 'Game design, engine-specific development (Unity, Unreal, Godot, Roblox)',
+  'academic': 'Research methodology across humanities, social sciences, and narratology',
+  'project-management': 'Project leadership, sprint coordination, and studio operations',
+  'specialized': 'Domain-specific experts: legal, compliance, finance, recruiting, and more',
+  'spatial-computing': 'visionOS, XR, and immersive interface development',
+  'support': 'Analytics, reporting, compliance checking, and customer support',
+  'internal': 'Pipeline-internal agents for Taktis workflows (hidden from task creation)'
+} %}
+
+<!-- Grouped by category -->
+{% set experts_by_cat = {} %}
+{% for expert in experts %}
+  {% set cat = expert.category | default('other') %}
+  {% if cat not in experts_by_cat %}
+    {% set _ = experts_by_cat.update({cat: []}) %}
+  {% endif %}
+  {% set _ = experts_by_cat[cat].append(expert) %}
+{% endfor %}
+
+{% for cat in category_order %}
+  {% if cat in experts_by_cat %}
+  <div class="expert-category-group">
+    <div class="expert-category-header" data-category="{{ cat }}">
+      <div>
+        <h2 class="expert-category-title">{{ cat }}</h2>
+        <span class="expert-category-desc">{{ category_descriptions[cat] }}</span>
+      </div>
+      <span class="expert-category-count">{{ experts_by_cat[cat] | length }}</span>
+    </div>
+    <div class="expert-grid">
+      {% for expert in experts_by_cat[cat] | sort(attribute='name') %}
+      <div class="expert-card" data-category="{{ cat }}" onclick="if(event.target.tagName!=='BUTTON'&&event.target.tagName!=='A')this.classList.toggle('expanded')">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span class="expert-name">{{ expert.name }}</span>
+          <div style="display:flex; gap:0.4rem; align-items:center;">
+            {% if expert.is_builtin %}
+            <span class="badge badge-builtin">builtin</span>
+            {% else %}
+            <a href="/experts/{{ expert.name }}/edit" class="btn-sm"
+               onclick="event.stopPropagation();"
+               style="font-size:0.75rem; text-decoration:none;">Edit</a>
+            <button class="btn-sm btn-danger"
+                    hx-post="/api/experts/{{ expert.name }}/delete"
+                    hx-confirm="Delete expert '{{ expert.name }}'?"
+                    hx-swap="none"
+                    onclick="event.stopPropagation();"
+                    style="font-size:0.75rem;">Del</button>
+            {% endif %}
+          </div>
+        </div>
+        <div class="expert-desc">{{ expert.description[:120] if expert.description else 'No description' }}{% if expert.description and expert.description|length > 120 %}&hellip;{% endif %}</div>
+        <div class="expert-prompt">{{ expert.system_prompt | default('No system prompt defined.') }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+{% endfor %}
+
+<!-- Uncategorized experts (custom with unknown category) -->
+{% set known_cats = category_order %}
+{% set other_experts = [] %}
+{% for expert in experts %}
+  {% if (expert.category | default('other')) not in known_cats %}
+    {% set _ = other_experts.append(expert) %}
+  {% endif %}
+{% endfor %}
+{% if other_experts %}
+<div class="expert-category-group">
+  <div class="expert-category-header" data-category="other">
+    <div>
+      <h2 class="expert-category-title">other</h2>
+      <span class="expert-category-desc">Uncategorized experts</span>
+    </div>
+    <span class="expert-category-count">{{ other_experts | length }}</span>
+  </div>
+  <div class="expert-grid">
+    {% for expert in other_experts | sort(attribute='name') %}
+    <div class="expert-card" onclick="if(event.target.tagName!=='BUTTON'&&event.target.tagName!=='A')this.classList.toggle('expanded')">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span class="expert-name">{{ expert.name }}</span>
+        <div style="display:flex; gap:0.4rem; align-items:center;">
+          <a href="/experts/{{ expert.name }}/edit" class="btn-sm"
+             onclick="event.stopPropagation();"
+             style="font-size:0.75rem; text-decoration:none;">Edit</a>
+          <button class="btn-sm btn-danger"
+                  hx-post="/api/experts/{{ expert.name }}/delete"
+                  hx-confirm="Delete expert '{{ expert.name }}'?"
+                  hx-swap="none"
+                  onclick="event.stopPropagation();"
+                  style="font-size:0.75rem;">Del</button>
+        </div>
+      </div>
+      <div class="expert-desc">{{ expert.description[:120] if expert.description else 'No description' }}{% if expert.description and expert.description|length > 120 %}&hellip;{% endif %}</div>
+      <div class="expert-prompt">{{ expert.system_prompt | default('No system prompt defined.') }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if not experts %}
+<div class="text-muted" style="padding:2rem; text-align:center;">No experts configured.</div>
+{% endif %}
+
+<script>
+function filterExperts(query) {
+  var q = query.toLowerCase();
+  var total = 0;
+  var visible = 0;
+  document.querySelectorAll('.expert-card').forEach(function(card) {
+    total++;
+    var name = (card.querySelector('.expert-name') || {}).textContent || '';
+    var desc = (card.querySelector('.expert-desc') || {}).textContent || '';
+    var cat = card.getAttribute('data-category') || '';
+    var match = name.toLowerCase().indexOf(q) !== -1 ||
+                desc.toLowerCase().indexOf(q) !== -1 ||
+                cat.toLowerCase().indexOf(q) !== -1;
+    card.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+  // Hide empty category groups
+  document.querySelectorAll('.expert-category-group').forEach(function(group) {
+    var cards = group.querySelectorAll('.expert-card');
+    var hasVisible = false;
+    cards.forEach(function(c) {
+      if (c.style.display !== 'none') hasVisible = true;
+    });
+    group.style.display = hasVisible ? '' : 'none';
+  });
+  // Update count
+  var countEl = document.getElementById('expert-search-count');
+  if (countEl) {
+    if (q) {
+      countEl.textContent = visible + ' of ' + total + ' experts';
+    } else {
+      countEl.textContent = total + ' experts';
+    }
+  }
+}
+</script>
+{% endblock %}

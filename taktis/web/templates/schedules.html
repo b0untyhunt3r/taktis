@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block title %}Schedules — Taktis{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb">
+  <a href="/">Dashboard</a> <span class="sep">/</span>
+  <span class="current">Schedules</span>
+</nav>
+<h1>Scheduled Pipeline Runs</h1>
+
+<div id="schedule-error" style="display:none; margin-bottom:1rem; padding:0.75rem 1rem; border-radius:var(--radius); background:var(--danger-dim); color:var(--danger); font-size:0.85rem; border:1px solid rgba(239,68,68,0.3);"></div>
+
+<details class="panel" style="margin-bottom:1.5rem;">
+  <summary style="cursor:pointer; color:var(--accent); font-size:0.9rem; font-weight:600;">+ Create Schedule</summary>
+  <form id="create-schedule-form" style="margin-top:1rem;">
+    <div class="form-row">
+      <div>
+        <label for="sched-name">Name</label>
+        <input type="text" id="sched-name" name="name" required placeholder="Nightly build pipeline">
+      </div>
+      <div>
+        <label for="sched-project">Project</label>
+        <select id="sched-project" name="project_name" required>
+          <option value="">Select project...</option>
+          {% for p in projects %}
+          <option value="{{ p.name }}">{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label for="sched-template">Pipeline Template</label>
+        <select id="sched-template" name="template_id" required>
+          <option value="">Select pipeline...</option>
+          {% for t in templates %}
+          <option value="{{ t.id }}">{{ t.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="sched-frequency">Frequency</label>
+        <select id="sched-frequency" name="frequency">
+          <option value="hourly">Hourly</option>
+          <option value="daily" selected>Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div id="time-row">
+        <label for="sched-time">Time of Day (UTC)</label>
+        <input type="time" id="sched-time" name="time_of_day" value="02:00">
+      </div>
+      <div id="day-row" style="display:none;">
+        <label for="sched-day">Day of Week</label>
+        <select id="sched-day" name="day_of_week">
+          <option value="monday">Monday</option>
+          <option value="tuesday">Tuesday</option>
+          <option value="wednesday">Wednesday</option>
+          <option value="thursday">Thursday</option>
+          <option value="friday">Friday</option>
+          <option value="saturday">Saturday</option>
+          <option value="sunday">Sunday</option>
+        </select>
+      </div>
+    </div>
+    <button type="submit" class="btn-success" style="margin-top:0.5rem;">Create Schedule</button>
+  </form>
+</details>
+
+{% if schedules %}
+<div class="panel">
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Project</th>
+        <th>Pipeline</th>
+        <th>Frequency</th>
+        <th>Time</th>
+        <th>Last Run</th>
+        <th>Status</th>
+        <th>Enabled</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in schedules %}
+      <tr id="sched-row-{{ s.id }}">
+        <td><strong>{{ s.name }}</strong></td>
+        <td>
+          <a href="/projects/{{ s.project_name }}">{{ s.project_name }}</a>
+        </td>
+        <td>
+          {% set ns = namespace(tmpl_name='Unknown') %}
+          {% for t in templates %}
+            {% if t.id == s.template_id %}
+              {% set ns.tmpl_name = t.name %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.tmpl_name }}
+        </td>
+        <td>
+          <span style="text-transform:capitalize;">{{ s.frequency }}</span>
+          {% if s.frequency == 'weekly' and s.day_of_week %}
+            <span class="text-muted" style="font-size:0.8em;">({{ s.day_of_week }})</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if s.frequency != 'hourly' %}
+            {{ s.time_of_day or '00:00' }} UTC
+          {% else %}
+            Every hour
+          {% endif %}
+        </td>
+        <td>
+          {% if s.last_run_at %}
+            <span style="font-size:0.82rem;">{{ s.last_run_at[:16] }}</span>
+          {% else %}
+            <span class="text-muted">Never</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if s.last_run_ok is none %}
+            <span class="badge badge-idle">No runs</span>
+          {% elif s.last_run_ok %}
+            <span class="badge badge-completed">OK</span>
+          {% else %}
+            <span class="badge badge-failed">Failed</span>
+          {% endif %}
+        </td>
+        <td>
+          <span id="toggle-{{ s.id }}"
+                hx-post="/api/schedules/{{ s.id }}/toggle"
+                hx-swap="innerHTML"
+                hx-target="#toggle-{{ s.id }}"
+                style="cursor:pointer;">
+            {% if s.enabled %}
+              <span class="badge badge-completed">Enabled</span>
+            {% else %}
+              <span class="badge badge-idle">Disabled</span>
+            {% endif %}
+          </span>
+        </td>
+        <td style="white-space:nowrap;">
+          <span id="run-{{ s.id }}" style="display:inline;">
+            <button class="btn btn-sm"
+                    hx-post="/api/schedules/{{ s.id }}/run-now"
+                    hx-swap="innerHTML"
+                    hx-target="#run-{{ s.id }}"
+                    style="margin-right:0.25rem;">
+              Run Now
+            </button>
+          </span>
+          <button class="btn btn-sm btn-danger"
+                  hx-delete="/api/schedules/{{ s.id }}"
+                  hx-confirm="Delete schedule '{{ s.name }}'?"
+                  hx-target="#sched-row-{{ s.id }}"
+                  hx-swap="outerHTML">
+            Delete
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="panel" style="text-align:center; color:var(--text-muted); padding:2rem;">
+  No schedules configured. Create one above to automatically trigger pipeline runs.
+</div>
+{% endif %}
+
+<script>
+// Show/hide time and day fields based on frequency
+document.getElementById('sched-frequency').addEventListener('change', function() {
+  var f = this.value;
+  document.getElementById('time-row').style.display = (f === 'hourly') ? 'none' : '';
+  document.getElementById('day-row').style.display = (f === 'weekly') ? '' : 'none';
+});
+
+// Handle form submission via fetch (JSON body)
+document.getElementById('create-schedule-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  var errEl = document.getElementById('schedule-error');
+  errEl.style.display = 'none';
+
+  var body = {
+    name: document.getElementById('sched-name').value,
+    project_name: document.getElementById('sched-project').value,
+    template_id: document.getElementById('sched-template').value,
+    frequency: document.getElementById('sched-frequency').value,
+    time_of_day: document.getElementById('sched-time').value,
+    day_of_week: document.getElementById('sched-day').value,
+  };
+
+  // Read CSRF token
+  var csrfMatch = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+  var headers = { 'Content-Type': 'application/json' };
+  if (csrfMatch) headers['X-CSRFToken'] = csrfMatch[1];
+
+  fetch('/api/schedules', {
+    method: 'POST',
+    headers: headers,
+    body: JSON.stringify(body),
+  })
+  .then(function(resp) { return resp.json().then(function(data) { return {ok: resp.ok, data: data}; }); })
+  .then(function(result) {
+    if (result.ok) {
+      window.location.reload();
+    } else {
+      errEl.textContent = result.data.error || 'Failed to create schedule';
+      errEl.style.display = 'block';
+    }
+  })
+  .catch(function(err) {
+    errEl.textContent = 'Network error: ' + err.message;
+    errEl.style.display = 'block';
+  });
+});
+</script>
+{% endblock %}

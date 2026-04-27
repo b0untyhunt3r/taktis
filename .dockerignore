@@ -1,0 +1,59 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.egg-info
+.venv
+venv
+env
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Local DB and state (would leak local data into image)
+taktis.db
+taktis.db-shm
+taktis.db-wal
+.taktis
+.orchestrator
+
+# Logs
+*.log
+server.log
+
+# Editor / tooling
+.vscode
+.idea
+.playwright-mcp
+.claude
+.cursor
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local docs build artifacts
+docs/screenshots
+docs/vault/.obsidian
+
+# Test and temp
+tests
+tmp
+/tmp
+
+# Environment files (secrets)
+.env
+.env.*
+!.env.example
+
+# Setup artifacts
+start.bat
+start.sh
+
+# Node (not needed in image, we install claude-code CLI globally in Dockerfile)
+node_modules

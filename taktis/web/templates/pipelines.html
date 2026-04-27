@@ -1,0 +1,2745 @@
+{% extends "base.html" %}
+{% block title %}Pipelines — Taktis{% endblock %}
+
+{% block content %}
+<style>
+  /* ------------------------------------------------------------------ */
+  /* Pipeline editor layout                                             */
+  /* ------------------------------------------------------------------ */
+  /* Make the container a viewport-filling flex column on this page */
+  .container:has(.pipeline-editor-wrap) {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 52px);    /* full viewport minus navbar */
+    overflow: hidden;
+    padding-bottom: 0.75rem;
+  }
+  .pipeline-editor-wrap {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  .pipeline-editor {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    overflow: hidden;
+    background: var(--bg-surface);
+  }
+
+  /* Left panel — templates + palette */
+  .panel-left {
+    width: 260px;
+    min-width: 260px;
+    background: var(--bg-elevated);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .panel-left h3 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    padding: 0.75rem 1rem 0.4rem;
+  }
+
+  /* Template management */
+  .template-section { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+  .template-section select {
+    width: 100%;
+    background: var(--bg-surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.82rem;
+    margin-bottom: 0.4rem;
+  }
+  .template-section select option { background: var(--bg-surface); }
+  .template-actions { display: flex; gap: 0.35rem; }
+  .template-actions button {
+    flex: 1;
+    font-size: 0.75rem;
+    padding: 0.3rem 0.4rem;
+  }
+
+  /* Node palette */
+  .node-palette { padding: 0.5rem 0.75rem; flex: 1; }
+  .palette-node {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.65rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 0.4rem;
+    cursor: grab;
+    transition: all var(--transition);
+    font-size: 0.82rem;
+    font-weight: 500;
+  }
+  .palette-node:hover {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+  .palette-node:active { cursor: grabbing; }
+  .palette-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Canvas */
+  .canvas-wrap { flex: 1; position: relative; }
+  #drawflow {
+    width: 100%;
+    height: 100%;
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  [data-theme="light"] #drawflow {
+    background-image: radial-gradient(circle, rgba(0,0,0,0.06) 1px, transparent 1px);
+  }
+
+  /* Drawflow dark overrides */
+  .drawflow .drawflow-node {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    color: var(--text);
+    min-width: 170px;
+    box-shadow: var(--shadow-md);
+    padding: 0;
+  }
+  .drawflow .drawflow-node.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim), var(--shadow-md);
+  }
+  .drawflow .drawflow-node .inputs,
+  .drawflow .drawflow-node .outputs {
+    /* keep default positioning (left/right) */
+  }
+  .drawflow .drawflow-node .input,
+  .drawflow .drawflow-node .output {
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
+    border: 2px solid var(--bg-surface);
+    border-radius: 50%;
+  }
+  .drawflow .connection .main-path {
+    stroke: var(--text-muted);
+    stroke-width: 3px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .drawflow .connection .main-path:hover {
+    stroke: var(--accent);
+    stroke-width: 4px;
+    cursor: pointer;
+  }
+  .drawflow .drawflow-delete {
+    background: var(--danger);
+    color: #fff;
+    border: none;
+  }
+  /* Hide default Drawflow node content wrapper padding */
+  .drawflow .drawflow-node .drawflow_content_node { padding: 0; }
+
+  /* Custom node card inside Drawflow */
+  .pipeline-node {
+    padding: 0.6rem 0.75rem;
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  }
+  .pipeline-node .node-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-bottom: 0.15rem;
+  }
+  .pipeline-node .node-subtitle {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+  /* Conditional / Human Gate output port labels */
+  .conditional .output_1::after,
+  .human_gate .output_1::after {
+    content: '✓';
+    position: absolute;
+    top: -2px;
+    right: -18px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #22c55e;
+  }
+  .conditional .output_2::after,
+  .human_gate .output_2::after {
+    content: '✗';
+    position: absolute;
+    top: -2px;
+    right: -18px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #ef4444;
+  }
+  .pipeline-node .node-wave {
+    position: absolute;
+    top: 0.3rem;
+    right: 0.45rem;
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.3rem;
+    letter-spacing: 0.03em;
+  }
+
+  /* Validation badge (red dot for misconfigured nodes) */
+  .pipeline-node .validation-badge {
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    width: 10px;
+    height: 10px;
+    background: var(--danger);
+    border-radius: 50%;
+    border: 2px solid var(--bg-surface);
+    display: none;
+    z-index: 5;
+  }
+  .pipeline-node .validation-badge.show {
+    display: block;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Node category shapes — visual distinction by role                  */
+  /* ------------------------------------------------------------------ */
+
+  /* AGENT nodes — hexagon shape (LLM-powered "thinking" nodes)        */
+  .drawflow .drawflow-node.agent {
+    clip-path: polygon(
+      15% 0%, 85% 0%,
+      100% 50%,
+      85% 100%, 15% 100%,
+      0% 50%
+    );
+    background: linear-gradient(
+      135deg,
+      var(--bg-surface) 0%,
+      rgba(99, 102, 241, 0.08) 100%
+    );
+    border: none;
+    padding: 4px 18px;
+    min-width: 190px;
+    filter: drop-shadow(0 0 1px rgba(99,102,241,0.5))
+            drop-shadow(0 0 8px rgba(99,102,241,0.12));
+  }
+  .drawflow .drawflow-node.agent .pipeline-node {
+    border-radius: 0;
+    border-left: 3px solid var(--accent);
+  }
+  .drawflow .drawflow-node.agent.selected {
+    filter: drop-shadow(0 0 2px var(--accent))
+            drop-shadow(0 0 12px rgba(99,102,241,0.3));
+  }
+  [data-theme="light"] .drawflow .drawflow-node.agent {
+    filter: drop-shadow(0 0 1px rgba(99,102,241,0.4))
+            drop-shadow(0 0 6px rgba(99,102,241,0.08));
+  }
+
+  /* CONTROL nodes — notched corners to suggest decision/routing       */
+  .drawflow .drawflow-node.conditional,
+  .drawflow .drawflow-node.llm_router,
+  .drawflow .drawflow-node.fan_out,
+  .drawflow .drawflow-node.loop,
+  .drawflow .drawflow-node.human_gate,
+  .drawflow .drawflow-node.phase_settings {
+    border-radius: 4px 12px 4px 12px;
+    border-style: solid;
+    border-width: 1.5px;
+  }
+  .drawflow .drawflow-node.conditional .pipeline-node,
+  .drawflow .drawflow-node.llm_router .pipeline-node,
+  .drawflow .drawflow-node.fan_out .pipeline-node,
+  .drawflow .drawflow-node.loop .pipeline-node,
+  .drawflow .drawflow-node.human_gate .pipeline-node,
+  .drawflow .drawflow-node.phase_settings .pipeline-node {
+    border-radius: 0 12px 0 12px;
+  }
+
+  /* TRANSFORM nodes — dashed border for data transformation           */
+  .drawflow .drawflow-node.output_parser,
+  .drawflow .drawflow-node.aggregator,
+  .drawflow .drawflow-node.text_transform {
+    border-style: dashed;
+    border-width: 1.5px;
+    border-radius: var(--radius-lg);
+  }
+
+  /* ACTION nodes — double border for concrete operations              */
+  .drawflow .drawflow-node.file_writer,
+  .drawflow .drawflow-node.plan_applier,
+  .drawflow .drawflow-node.api_call,
+  .drawflow .drawflow-node.pipeline_generator {
+    border-radius: 6px;
+    border: 1.5px solid var(--border-strong);
+    outline: 1px solid var(--border-strong);
+    outline-offset: 2px;
+  }
+  .drawflow .drawflow-node.file_writer .pipeline-node,
+  .drawflow .drawflow-node.plan_applier .pipeline-node,
+  .drawflow .drawflow-node.api_call .pipeline-node,
+  .drawflow .drawflow-node.pipeline_generator .pipeline-node {
+    border-radius: 0 4px 4px 0;
+  }
+  .drawflow .drawflow-node.file_writer.selected,
+  .drawflow .drawflow-node.plan_applier.selected,
+  .drawflow .drawflow-node.api_call.selected,
+  .drawflow .drawflow-node.pipeline_generator.selected {
+    border-color: var(--accent);
+    outline-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim), var(--shadow-md);
+  }
+
+  /* Palette hint: category label badges */
+  .palette-cat-agent .palette-dot {
+    box-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
+  }
+
+  /* Zoom controls */
+  .zoom-controls {
+    position: absolute;
+    bottom: 1rem;
+    right: 1rem;
+    display: flex;
+    gap: 0.25rem;
+    z-index: 10;
+  }
+  .zoom-controls button {
+    width: 32px;
+    height: 32px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .zoom-controls button:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+  }
+
+  /* Right panel — config */
+  .panel-right {
+    width: 270px;
+    min-width: 270px;
+    background: var(--bg-elevated);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .config-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    padding: 1rem;
+    text-align: center;
+  }
+  .config-panel { padding: 0.75rem; display: none; }
+  .config-panel.active { display: block; }
+  .config-panel label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+    margin-top: 0.7rem;
+  }
+  .config-panel label:first-child { margin-top: 0; }
+  .config-panel input[type="text"],
+  .config-panel textarea,
+  .config-panel select {
+    width: 100%;
+    background: var(--bg-surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.82rem;
+    font-family: inherit;
+    resize: vertical;
+  }
+  .config-panel textarea { min-height: 100px; }
+  .config-panel input:focus,
+  .config-panel textarea:focus,
+  .config-panel select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-dim);
+  }
+  .config-panel select option { background: var(--bg-surface); }
+  .config-panel .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.3rem;
+  }
+  .config-panel .checkbox-row input[type="checkbox"] {
+    width: auto;
+    accent-color: var(--accent);
+  }
+  .config-node-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0.25rem;
+  }
+
+  /* Bottom toolbar */
+  .editor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    flex-shrink: 0;
+  }
+  .editor-toolbar input[type="text"] {
+    background: var(--bg-surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.82rem;
+    width: 200px;
+  }
+  .editor-toolbar input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .editor-toolbar .spacer { flex: 1; }
+
+  /* Buttons */
+  .btn-sm {
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+  .btn-sm:hover { border-color: var(--accent); background: var(--accent-dim); }
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-danger { color: var(--danger); }
+  .btn-danger:hover { background: var(--danger-dim); border-color: var(--danger); }
+
+  /* Variable mapping UI */
+  .var-mapping { margin-top: 0.5rem; }
+  .var-section-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    margin: 0.7rem 0 0.3rem;
+    padding-bottom: 0.2rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .var-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.35rem;
+  }
+  .var-row .var-name {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text);
+    min-width: 0;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .var-row .var-arrow {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    flex-shrink: 0;
+  }
+  .var-row select {
+    flex: 1.5;
+    min-width: 0;
+    background: var(--bg-surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.3rem 0.4rem;
+    font-size: 0.78rem;
+  }
+  .var-row select option { background: var(--bg-surface); }
+  .var-row select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-dim);
+  }
+  .var-auto-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    margin-bottom: 0.2rem;
+    padding: 0.15rem 0;
+  }
+  .var-auto-row .var-check {
+    color: var(--success);
+    font-size: 0.82rem;
+  }
+  .var-auto-row .var-auto-name { font-weight: 600; color: var(--text); }
+  .var-auto-row .var-auto-hint { font-size: 0.7rem; }
+  .var-no-vars {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 0.3rem 0;
+  }
+
+  /* Upstream variable chips */
+  .var-chips {
+    margin-bottom: 0.35rem;
+  }
+  .var-chips-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+  }
+  .var-chips-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  .var-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.72rem;
+    font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', monospace;
+    padding: 0.2rem 0.45rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+  .var-chip:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+  }
+  .var-chip .chip-src {
+    font-size: 0.65rem;
+    opacity: 0.6;
+  }
+
+  /* Inline prompt textarea — taller + monospace */
+  .config-panel textarea[data-field="prompt"],
+  .config-panel textarea[data-field="retry_revision_prompt"],
+  .config-panel textarea[data-field="revision_prompt"],
+  .config-panel textarea[data-field="routing_prompt"] {
+    min-height: 180px;
+    font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+
+  /* Textarea expand button */
+  .textarea-wrap { position: relative; }
+  .textarea-wrap textarea { width: 100%; }
+  .btn-expand-ta {
+    position: absolute; top: 4px; right: 4px; z-index: 2;
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    border-radius: 4px; padding: 2px 6px; cursor: pointer;
+    color: var(--text-muted); font-size: 0.7rem; opacity: 0.7;
+    transition: opacity 0.15s;
+  }
+  .btn-expand-ta:hover { opacity: 1; color: var(--text); }
+
+  /* Fullscreen textarea modal */
+  .ta-modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 10000;
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center;
+  }
+  .ta-modal-overlay.active { display: flex; }
+  .ta-modal {
+    width: 85vw; height: 80vh; background: var(--bg-surface);
+    border: 1px solid var(--border-strong); border-radius: 12px;
+    display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .ta-modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+    font-weight: 600; font-size: 0.85rem;
+  }
+  .ta-modal-header button {
+    background: var(--accent); color: #fff; border: none;
+    border-radius: 6px; padding: 0.35rem 1rem; cursor: pointer;
+    font-size: 0.8rem;
+  }
+  .ta-modal textarea {
+    flex: 1; margin: 0; border: none; border-radius: 0 0 12px 12px;
+    background: var(--bg); color: var(--text); resize: none;
+    padding: 1rem; font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', monospace;
+    font-size: 0.85rem; line-height: 1.6; outline: none;
+  }
+
+  /* Node tooltip */
+  .node-tooltip {
+    position: fixed;
+    z-index: 9999;
+    max-width: 360px;
+    padding: 0.5rem 0.7rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--text);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .node-tooltip.visible { opacity: 1; }
+  .node-tooltip.interactive.visible { pointer-events: auto; }
+  .node-tooltip .tt-scroll {
+    max-height: 350px;
+    overflow-y: auto;
+  }
+  .node-tooltip .tt-label {
+    font-weight: 700;
+    font-size: 0.82rem;
+    margin-bottom: 0.2rem;
+  }
+  .node-tooltip .tt-cat {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    background: var(--bg-surface);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    margin-bottom: 0.3rem;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    padding: 0.65rem 1rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    z-index: 999;
+    animation: slideIn 0.25s ease;
+    box-shadow: var(--shadow-lg);
+  }
+  .toast.success { background: var(--success); color: #fff; }
+  .toast.error { background: var(--danger); color: #fff; }
+  @keyframes slideIn { from { transform: translateY(20px); opacity:0; } to { transform: none; opacity:1; } }
+
+  /* Phase tabs */
+  .phase-tabs {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border);
+    padding: 0 0.5rem;
+    min-height: 36px;
+    overflow-x: auto;
+  }
+  .phase-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+    user-select: none;
+  }
+  .phase-tab:hover { color: var(--text); background: var(--bg-surface); }
+  .phase-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+  }
+  .phase-tab .tab-close {
+    font-size: 0.72rem;
+    opacity: 0.4;
+    cursor: pointer;
+    padding: 0 0.15rem;
+    border-radius: 3px;
+  }
+  .phase-tab .tab-close:hover { opacity: 1; background: var(--danger-dim); color: var(--danger); }
+  .phase-tab-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    font-size: 1rem;
+    color: var(--text-muted);
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    margin-left: 0.35rem;
+    transition: all var(--transition);
+  }
+  .phase-tab-add:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
+
+  /* Multi-select checkboxes for context_files */
+  .multi-select-list {
+    max-height: 160px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.3rem;
+    background: var(--bg-surface);
+  }
+  .multi-select-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.35rem;
+    font-size: 0.78rem;
+    border-radius: 4px;
+  }
+  .multi-select-item:hover { background: var(--bg-elevated); }
+  .multi-select-item input { accent-color: var(--accent); }
+  .multi-select-empty {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 0.3rem;
+  }
+
+  /* Run flow modal */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal-box {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    min-width: 340px;
+    box-shadow: var(--shadow-lg);
+  }
+  .modal-box h3 { margin-bottom: 1rem; font-size: 1rem; }
+  .modal-box select {
+    width: 100%;
+    background: var(--bg-surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+  .modal-box select option { background: var(--bg-surface); }
+  .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+</style>
+
+<nav class="breadcrumb">
+  <a href="/">Dashboard</a> <span class="sep">/</span>
+  <span class="current">Pipelines</span>
+</nav>
+<h1 style="margin-bottom:1rem">Pipeline Editor</h1>
+
+<div class="pipeline-editor-wrap">
+<div class="pipeline-editor">
+  <!-- Left panel -->
+  <div class="panel-left">
+    <h3>Templates</h3>
+    <div class="template-section">
+      <select id="template-select" onchange="loadTemplate(this.value)">
+        <option value="">-- New Template --</option>
+        {% for t in pipeline_templates %}
+        <option value="{{ t.id }}">{{ t.name }}</option>
+        {% endfor %}
+      </select>
+      <div class="template-actions">
+        <button class="btn-sm" onclick="newTemplate()" title="New template">New</button>
+        <button class="btn-sm" onclick="cloneTemplate()" title="Clone selected" id="btn-clone">Clone</button>
+        <button class="btn-sm btn-danger" onclick="deleteTemplate()" title="Delete selected">Delete</button>
+      </div>
+    </div>
+
+    <!-- Auto-populated from ${VAR} references in api_call nodes -->
+    <div id="env-vars-required" class="template-section" style="display:none;">
+      <h3 style="margin-bottom:0.4rem;">Required Env Vars</h3>
+      <ul id="env-vars-required-list" style="font-family:var(--mono); font-size:0.78rem; padding-left:1.1rem; margin:0.25rem 0; color:var(--text);"></ul>
+      <p style="font-size:0.7rem; color:var(--text-muted); margin:0.25rem 0 0;">
+        Set on each project's Environment Variables panel, or fall through to the host shell / <code>.env</code>.
+      </p>
+    </div>
+
+    <h3>Nodes</h3>
+    <div class="node-palette" id="node-palette">
+      <!-- Built dynamically from node_types -->
+    </div>
+  </div>
+
+  <!-- Canvas -->
+  <div class="canvas-wrap">
+    <div class="phase-tabs" id="phase-tabs" style="display:none">
+      <!-- Tabs rendered by JS -->
+    </div>
+    <div id="drawflow"></div>
+    <div class="zoom-controls">
+      <button onclick="window._pipelineEditor.zoom_in()" title="Zoom In">+</button>
+      <button onclick="window._pipelineEditor.zoom_out()" title="Zoom Out">&minus;</button>
+      <button onclick="window._pipelineEditor.zoom_reset()" title="Reset Zoom">&#8857;</button>
+    </div>
+  </div>
+
+  <!-- Right panel — config -->
+  <div class="panel-right">
+    <div class="config-empty" id="config-empty">
+      Select a node to configure it
+    </div>
+    <div class="config-panel" id="config-panel">
+      <div class="config-node-name" id="config-node-name"></div>
+      <div id="config-fields"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Fullscreen textarea modal -->
+<div class="ta-modal-overlay" id="ta-modal-overlay">
+  <div class="ta-modal">
+    <div class="ta-modal-header">
+      <span id="ta-modal-title">Edit Prompt</span>
+      <button id="ta-modal-done">Done</button>
+    </div>
+    <textarea id="ta-modal-editor" spellcheck="false"></textarea>
+  </div>
+</div>
+
+<!-- Bottom toolbar -->
+<div class="editor-toolbar">
+  <input type="text" id="template-name" placeholder="Template name..." value="">
+  <button class="btn-sm btn-primary" onclick="saveTemplate()">Save</button>
+  <div class="spacer"></div>
+  <button class="btn-sm btn-primary" onclick="openRunModal()">Run Flow</button>
+</div>
+</div><!-- /pipeline-editor-wrap -->
+
+<!-- Run flow modal -->
+<div class="modal-overlay" id="run-modal">
+  <div class="modal-box">
+    <h3>Run Flow on Project</h3>
+    <select id="run-project-select">
+      <option value="">-- Select a project --</option>
+      {% for p in projects %}
+      <option value="{{ p.name }}">{{ p.name }}</option>
+      {% endfor %}
+    </select>
+    <div class="modal-actions">
+      <button class="btn-sm" onclick="closeRunModal()">Cancel</button>
+      <button class="btn-sm btn-primary" onclick="executeFlow()">Execute</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shared tooltip -->
+<div class="node-tooltip" id="node-tooltip"></div>
+
+<script>
+(function() {
+  // ----------------------------------------------------------------
+  // Data from server
+  // ----------------------------------------------------------------
+  const NODE_TYPES = {{ node_types | tojson }};
+  const EXPERTS = {{ experts | tojson }};
+  const TEMPLATES = {{ pipeline_templates | tojson }};
+  const TEMPLATE_VARS = {{ template_variables | tojson }};
+  const TEMPLATE_TEXTS = {{ template_texts | tojson }};
+  const AGENT_TEMPLATES = {{ agent_templates | tojson }};
+
+  // Build quick lookup by type_id
+  const NT_BY_ID = {};
+  NODE_TYPES.forEach(function(nt) { NT_BY_ID[nt.type_id] = nt; });
+
+  // Auto-inject hint text
+  const AUTO_HINTS = {
+    description: 'from project',
+    expert_options: 'from expert registry',
+  };
+
+  // ----------------------------------------------------------------
+  // CSRF
+  // ----------------------------------------------------------------
+  function getCsrf() {
+    const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+    return m ? m[1] : '';
+  }
+
+  // ----------------------------------------------------------------
+  // Toast
+  // ----------------------------------------------------------------
+  function toast(msg, type) {
+    type = type || 'success';
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  }
+
+  // ----------------------------------------------------------------
+  // Drawflow init
+  // ----------------------------------------------------------------
+  const container = document.getElementById('drawflow');
+  const editor = new Drawflow(container);
+  editor.reroute = true;
+  editor.start();
+  window._pipelineEditor = editor;  // expose for testing & integrations
+
+  // Track which Drawflow node is selected
+  let selectedNodeId = null;
+  let currentTemplateId = null;
+
+  // Multi-phase state
+  let phaseCounter = 0;  // incremented to generate unique module names
+  let currentModule = 'Home';  // the active Drawflow module
+  let phaseModules = ['Home'];  // ordered list of module names
+
+  // ----------------------------------------------------------------
+  // Phase tab management
+  // ----------------------------------------------------------------
+  const phaseTabsEl = document.getElementById('phase-tabs');
+
+  function renderPhaseTabs() {
+    phaseTabsEl.innerHTML = '';
+    if (phaseModules.length <= 1 && !hasPhaseSettings()) {
+      phaseTabsEl.style.display = 'none';
+      return;
+    }
+    phaseTabsEl.style.display = 'flex';
+
+    phaseModules.forEach(function(mod, idx) {
+      var tab = document.createElement('div');
+      tab.className = 'phase-tab' + (mod === currentModule ? ' active' : '');
+      tab.dataset.module = mod;
+
+      // Try to get phase name from phase_settings node
+      var phaseName = getPhaseLabel(mod) || ('Phase ' + (idx + 1));
+      var label = (idx + 1) + '. ' + phaseName;
+      tab.innerHTML = '<span>' + label + '</span>';
+
+      if (phaseModules.length > 1) {
+        var closeBtn = document.createElement('span');
+        closeBtn.className = 'tab-close';
+        closeBtn.textContent = '\u00d7';
+        closeBtn.addEventListener('click', function(ev) {
+          ev.stopPropagation();
+          deletePhase(mod);
+        });
+        tab.appendChild(closeBtn);
+      }
+
+      tab.addEventListener('click', function() { switchPhase(mod); });
+      phaseTabsEl.appendChild(tab);
+    });
+
+    // Add phase button
+    var addBtn = document.createElement('div');
+    addBtn.className = 'phase-tab-add';
+    addBtn.textContent = '+';
+    addBtn.title = 'Add Phase';
+    addBtn.addEventListener('click', addPhase);
+    phaseTabsEl.appendChild(addBtn);
+  }
+
+  function getPhaseLabel(mod) {
+    var exported = editor.export();
+    var modData = exported.drawflow && exported.drawflow[mod] && exported.drawflow[mod].data;
+    if (!modData) return null;
+    for (var id in modData) {
+      if (modData[id].name === 'phase_settings') {
+        return (modData[id].data && modData[id].data.phase_name) || null;
+      }
+    }
+    return null;
+  }
+
+  function hasPhaseSettings() {
+    var exported = editor.export();
+    for (var mod in exported.drawflow || {}) {
+      var modData = exported.drawflow[mod].data || {};
+      for (var id in modData) {
+        if (modData[id].name === 'phase_settings') return true;
+      }
+    }
+    return false;
+  }
+
+  function addPhase() {
+    // Use total phase count to name new phases (avoids "Phase 1" collision)
+    var newNum = phaseModules.length + 1;
+    phaseCounter = Math.max(phaseCounter + 1, newNum);
+    var modName = 'Phase_' + phaseCounter;
+    editor.addModule(modName);
+    phaseModules.push(modName);
+
+    // Switch to the new module
+    switchPhase(modName);
+
+    // Auto-insert a phase_settings node
+    var nt = NT_BY_ID['phase_settings'];
+    if (nt) {
+      var nodeData = { name: 'Phase Settings', type_id: 'phase_settings', phase_name: 'Phase ' + newNum, phase_goal: '', success_criteria: '', context_files: '' };
+      var html = '<div class="pipeline-node" data-tooltip="phase_settings" style="border-left-color:' + nt.color + '">' +
+                 '<span class="validation-badge"></span>' +
+                 '<div class="node-title">Phase Settings</div>' +
+                 '<div class="node-subtitle">Phase ' + newNum + '</div></div>';
+      editor.addNode('phase_settings', 0, 0, 50, 50, 'phase_settings', nodeData, html);
+    }
+
+    renderPhaseTabs();
+    recomputeWaves();
+  }
+
+  function switchPhase(mod) {
+    if (mod === currentModule) return;
+    currentModule = mod;
+    editor.changeModule(mod);
+    selectedNodeId = null;
+    hideConfigPanel();
+    renderPhaseTabs();
+    setTimeout(recomputeWaves, 50);
+  }
+
+  function deletePhase(mod) {
+    if (phaseModules.length <= 1) return;
+    if (!confirm('Delete this phase and all its nodes?')) return;
+
+    var idx = phaseModules.indexOf(mod);
+    phaseModules.splice(idx, 1);
+
+    // Switch away BEFORE removing — Drawflow's removeModule() internally
+    // calls changeModule() on the removed module, which crashes.
+    var newIdx = Math.min(idx, phaseModules.length - 1);
+    currentModule = phaseModules[newIdx];
+    editor.changeModule(currentModule);
+
+    // Now safe to remove
+    try { editor.removeModule(mod); } catch(e) { /* Drawflow internal error — module already gone */ }
+
+    // Clean up Drawflow's internal data in case removeModule didn't
+    if (editor.drawflow.drawflow[mod]) {
+      delete editor.drawflow.drawflow[mod];
+    }
+
+    hideConfigPanel();
+    selectedNodeId = null;
+    renderPhaseTabs();
+    recomputeWaves();
+  }
+
+  // Helper to get current module's data from exported graph
+  function getCurrentModuleData() {
+    var exported = editor.export();
+    return (exported.drawflow && exported.drawflow[currentModule] && exported.drawflow[currentModule].data) || {};
+  }
+
+  // ----------------------------------------------------------------
+  // Build node palette grouped by category
+  // ----------------------------------------------------------------
+  const palette = document.getElementById('node-palette');
+  const categories = {};
+  NODE_TYPES.forEach(function(nt) {
+    if (!categories[nt.category]) categories[nt.category] = [];
+    categories[nt.category].push(nt);
+  });
+  const catLabels = { agent: 'Agent', transform: 'Transform', action: 'Action', control: 'Control' };
+  Object.keys(categories).sort().forEach(function(cat) {
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:0.6rem 0 0.25rem;';
+    hdr.textContent = catLabels[cat] || cat;
+    palette.appendChild(hdr);
+    categories[cat].forEach(function(nt) {
+      const div = document.createElement('div');
+      div.className = 'palette-node';
+      div.draggable = true;
+      div.dataset.typeId = nt.type_id;
+      div.dataset.tooltip = nt.type_id;
+      div.innerHTML = '<div class="palette-dot" style="background:' + nt.color + '"></div>' +
+                      '<span>' + nt.label + '</span>';
+      div.addEventListener('dragstart', function(ev) {
+        ev.dataTransfer.setData('node-type', nt.type_id);
+      });
+      palette.appendChild(div);
+    });
+  });
+
+  // ----------------------------------------------------------------
+  // Drop on canvas
+  // ----------------------------------------------------------------
+  container.addEventListener('dragover', function(ev) { ev.preventDefault(); });
+  container.addEventListener('drop', function(ev) {
+    ev.preventDefault();
+    const typeId = ev.dataTransfer.getData('node-type');
+    if (!typeId) return;
+    const nt = NODE_TYPES.find(function(n) { return n.type_id === typeId; });
+    if (!nt) return;
+
+    // Get position relative to canvas, accounting for Drawflow's scroll/zoom
+    const rect = container.getBoundingClientRect();
+    const x = (ev.clientX - rect.left) / (editor.zoom || 1) - (editor.precanvas.getBoundingClientRect().x - rect.x) / (editor.zoom || 1);
+    const y = (ev.clientY - rect.top) / (editor.zoom || 1) - (editor.precanvas.getBoundingClientRect().y - rect.y) / (editor.zoom || 1);
+
+    const nodeData = { name: nt.label, type_id: typeId };
+    // Set defaults from config schema
+    nt.config_schema.forEach(function(f) {
+      if (f.default !== null && f.default !== undefined) {
+        nodeData[f.key] = f.default;
+      }
+    });
+
+    const html = '<div class="pipeline-node" data-tooltip="' + typeId + '" style="border-left-color:' + nt.color + '">' +
+                 '<span class="validation-badge"></span>' +
+                 '<div class="node-title">' + nt.label + '</div>' +
+                 '<div class="node-subtitle">unconfigured</div></div>';
+
+    editor.addNode(
+      typeId,              // name
+      nt.inputs,           // inputs
+      nt.outputs,          // outputs
+      x, y,                // position
+      typeId,              // class
+      nodeData,            // data
+      html                 // html
+    );
+  });
+
+  // ----------------------------------------------------------------
+  // Node selection → config panel
+  // ----------------------------------------------------------------
+  editor.on('nodeSelected', function(nodeId) {
+    selectedNodeId = nodeId;
+    showConfigPanel(nodeId);
+  });
+
+  editor.on('nodeUnselected', function() {
+    selectedNodeId = null;
+    hideConfigPanel();
+  });
+
+  // Prevent phase_settings node deletion
+  var origRemoveNodeId = editor.removeNodeId.bind(editor);
+  editor.removeNodeId = function(id) {
+    // id comes as "node-<number>" — extract the numeric part for getNodeFromId
+    var numId = id.replace('node-', '');
+    try {
+      var nodeInfo = getNodeScoped(numId);
+      if (nodeInfo && nodeInfo.name === 'phase_settings') {
+        toast('Phase Settings node cannot be deleted', 'error');
+        return;
+      }
+    } catch(e) { /* node not found — let Drawflow handle it */ }
+    origRemoveNodeId(id);
+  };
+
+  editor.on('nodeRemoved', function(nodeId) {
+    if (selectedNodeId == nodeId) {
+      selectedNodeId = null;
+      hideConfigPanel();
+    }
+  });
+
+  /** Module-scoped node lookup — avoids cross-module ID collisions. */
+  function getNodeScoped(nodeId) {
+    var mod = editor.module;
+    try {
+      var modData = editor.drawflow.drawflow[mod].data;
+      var nd = modData[String(nodeId)];
+      if (nd) return nd;
+    } catch(e) {}
+    // Fallback to global lookup (single-module flows)
+    try { return getNodeScoped(nodeId); } catch(e2) { return null; }
+  }
+
+  function hideConfigPanel() {
+    document.getElementById('config-empty').style.display = 'flex';
+    document.getElementById('config-panel').classList.remove('active');
+  }
+
+  function showConfigPanel(nodeId) {
+    const nodeInfo = getNodeScoped(nodeId);
+    if (!nodeInfo) return;
+    const typeId = nodeInfo.name;
+    const nt = NODE_TYPES.find(function(n) { return n.type_id === typeId; });
+    if (!nt) return;
+
+    document.getElementById('config-empty').style.display = 'none';
+    const panel = document.getElementById('config-panel');
+    panel.classList.add('active');
+    document.getElementById('config-node-name').textContent = nodeInfo.data.name || nt.label;
+
+    const fieldsDiv = document.getElementById('config-fields');
+    fieldsDiv.innerHTML = '';
+
+    // Node name field
+    const nameLabel = document.createElement('label');
+    nameLabel.textContent = 'Node Name';
+    fieldsDiv.appendChild(nameLabel);
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = nodeInfo.data.name || '';
+    const varLabel = document.createElement('label');
+    varLabel.textContent = 'Variable Name';
+    varLabel.style.marginTop = '0.3rem';
+    const varInput = document.createElement('input');
+    varInput.type = 'text';
+    varInput.disabled = true;
+    varInput.value = toVarName(nodeInfo.data.name || nt.label);
+    varInput.style.fontFamily = "'SFMono-Regular','Consolas','Liberation Mono',monospace";
+    varInput.style.opacity = '0.7';
+
+    nameInput.addEventListener('change', function() {
+      var oldName = nodeInfo.data.name || '';
+      var newName = this.value;
+      updateNodeData(nodeId, 'name', newName);
+      document.getElementById('config-node-name').textContent = newName;
+      varInput.value = toVarName(newName);
+      updateNodeHtml(nodeId);
+      // Auto-update variable_maps in all other nodes that reference the old name
+      if (oldName && oldName !== newName) {
+        updateVariableMapsOnRename(oldName, newName);
+      }
+    });
+    fieldsDiv.appendChild(nameInput);
+    fieldsDiv.appendChild(varLabel);
+    fieldsDiv.appendChild(varInput);
+
+    // Agent node: field visibility per mode
+    // Fields to always skip (handled by visual mapping UI in template mode)
+    const isAgent = (typeId === 'agent');
+    const agentMode = isAgent ? (nodeInfo.data.mode || 'standard') : '';
+    const isTemplateMode = isAgent && agentMode === 'template';
+    const skipFields = isAgent
+      ? new Set(['variable_map', 'inject_description', 'inject_expert_options'])
+      : new Set();
+    // Which fields show in which agent modes
+    const AGENT_MODE_FIELDS = {
+      standard: new Set(['mode', 'model', 'expert', 'prompt', 'interactive',
+                         'retry_transient', 'retry_max_attempts', 'retry_backoff']),
+      template: new Set(['mode', 'model', 'expert', 'template', 'prompt', 'interactive',
+                         'inject_expert_options', 'inject_description',
+                         'retry_on_pattern', 'max_retries', 'retry_revision_template', 'retry_revision_prompt',
+                         'retry_transient', 'retry_max_attempts', 'retry_backoff']),
+    };
+
+    // Agent field order: expert first, then mode, then template (if preset mode)
+    var schemaFields = nt.config_schema;
+    if (isAgent) {
+      var order = ['expert', 'mode', 'template', 'model'];
+      schemaFields = schemaFields.slice().sort(function(a, b) {
+        var ai = order.indexOf(a.key), bi = order.indexOf(b.key);
+        if (ai === -1) ai = 100;
+        if (bi === -1) bi = 100;
+        return ai - bi;
+      });
+    }
+
+    // Config schema fields
+    schemaFields.forEach(function(f) {
+      if (skipFields.has(f.key)) return;
+      // Agent mode filtering: skip fields not relevant to current mode
+      if (isAgent && agentMode && AGENT_MODE_FIELDS[agentMode] && !AGENT_MODE_FIELDS[agentMode].has(f.key)) return;
+
+      // Agent mode: rename "Mode" options for display
+      var displayLabel = f.label;
+      if (f.field_type !== 'checkbox') {
+        const label = document.createElement('label');
+        label.textContent = displayLabel;
+        fieldsDiv.appendChild(label);
+        if (f.hint) {
+          var hintEl = document.createElement('div');
+          hintEl.style.cssText = 'font-size:0.7rem;color:var(--text-muted);margin:-0.1rem 0 0.3rem;line-height:1.35;font-weight:400;text-transform:none;letter-spacing:0';
+          hintEl.textContent = f.hint;
+          fieldsDiv.appendChild(hintEl);
+        }
+      }
+
+      let input;
+      if (f.field_type === 'expert_select') {
+        input = document.createElement('select');
+        input.dataset.expertSelect = '1';
+        const emptyOpt = document.createElement('option');
+        emptyOpt.value = '';
+        emptyOpt.textContent = '-- Select expert --';
+        input.appendChild(emptyOpt);
+        // Build lookup for matching by ID or name (backwards compat)
+        var currentExpertId = nodeInfo.data['expert_id'] || '';
+        var currentExpertName = nodeInfo.data[f.key] || '';
+        EXPERTS.forEach(function(e) {
+          const opt = document.createElement('option');
+          opt.value = e.id;
+          opt.textContent = e.name;
+          if (e.id === currentExpertId || (!currentExpertId && e.name === currentExpertName)) opt.selected = true;
+          input.appendChild(opt);
+        });
+        input.addEventListener('change', function() {
+          var selectedId = this.value;
+          var selectedExpert = EXPERTS.find(function(e) { return e.id === selectedId; });
+          updateNodeData(nodeId, 'expert_id', selectedId);
+          updateNodeData(nodeId, f.key, selectedExpert ? selectedExpert.name : '');
+          updateNodeHtml(nodeId);
+        });
+      } else if (f.field_type === 'select') {
+        input = document.createElement('select');
+        input.dataset.field = f.key;
+        // Dynamic options for template dropdowns (populated from DB)
+        var selectOptions = f.options || [];
+        if ((f.key === 'template' || f.key === 'retry_revision_template') && AGENT_TEMPLATES && AGENT_TEMPLATES.length) {
+          selectOptions = [''].concat(AGENT_TEMPLATES.map(function(t) { return t.slug; }));
+        }
+        selectOptions.forEach(function(o) {
+          const opt = document.createElement('option');
+          opt.value = o;
+          // Show display name for template slugs
+          if (o && (f.key === 'template' || f.key === 'retry_revision_template')) {
+            var tmpl = AGENT_TEMPLATES.find(function(t) { return t.slug === o; });
+            opt.textContent = tmpl ? tmpl.name : o;
+          } else if (isAgent && f.key === 'mode') {
+            // Friendly display names for agent mode
+            opt.textContent = o === 'template' ? 'Preset' : o === 'standard' ? 'Standard' : o || '-- none --';
+          } else {
+            opt.textContent = o || '-- none --';
+          }
+          if (nodeInfo.data[f.key] === o) opt.selected = true;
+          input.appendChild(opt);
+        });
+        input.addEventListener('change', function() {
+          updateNodeData(nodeId, f.key, this.value);
+          // Agent mode change: re-render the config panel
+          if (isAgent && f.key === 'mode') {
+            showConfigPanel(nodeId);
+            return;
+          }
+          // Conditional: disable condition_value when task_failed is selected
+          if (typeId === 'conditional' && f.key === 'condition_type') {
+            var cvInput = fieldsDiv.querySelector('[data-field="condition_value"]');
+            if (cvInput) {
+              cvInput.disabled = (this.value === 'task_failed');
+              if (this.value === 'task_failed') cvInput.value = '';
+            }
+          }
+          // "Load Preset" → fill prompt textarea, lock it
+          if (isTemplateMode && f.key === 'template') {
+            var promptTa = fieldsDiv.querySelector('textarea[data-field="prompt"]');
+            var custBtn = fieldsDiv.querySelector('.btn-customize-prompt');
+            var existingChips = fieldsDiv.querySelector('.var-chips');
+            if (this.value) {
+              var presetText = TEMPLATE_TEXTS[this.value] || '';
+              updateNodeData(nodeId, 'prompt', '');
+              if (promptTa) { promptTa.value = presetText; promptTa.disabled = true; }
+              if (custBtn) custBtn.style.display = '';
+              if (existingChips) existingChips.remove();  // hide chips when locked
+            } else {
+              updateNodeData(nodeId, 'prompt', '');
+              if (promptTa) { promptTa.value = ''; promptTa.disabled = false; }
+              if (custBtn) custBtn.style.display = 'none';
+              // Show chips when unlocked
+              if (!existingChips && promptTa) {
+                var chipsDiv = buildUpstreamChips(nodeId, promptTa);
+                if (chipsDiv) promptTa.parentNode.insertBefore(chipsDiv, promptTa);
+              }
+            }
+            rebuildVariableMappingFromPrompt(nodeId, fieldsDiv);
+          }
+          // "Revision Preset" → fill revision textarea, lock it
+          if (isTemplateMode && f.key === 'retry_revision_template') {
+            var revTa = fieldsDiv.querySelector('textarea[data-field="retry_revision_prompt"]');
+            var revBtn = fieldsDiv.querySelector('.btn-customize-revision');
+            if (this.value) {
+              var revText = TEMPLATE_TEXTS[this.value] || '';
+              updateNodeData(nodeId, 'retry_revision_prompt', '');
+              if (revTa) { revTa.value = revText; revTa.disabled = true; }
+              if (revBtn) revBtn.style.display = '';
+            } else {
+              updateNodeData(nodeId, 'retry_revision_prompt', '');
+              if (revTa) { revTa.value = ''; revTa.disabled = false; }
+              if (revBtn) revBtn.style.display = 'none';
+            }
+          }
+          updateNodeHtml(nodeId);
+        });
+      } else if (f.field_type === 'textarea') {
+        input = document.createElement('textarea');
+        input.dataset.field = f.key;
+
+        // Determine if this textarea is locked to a preset
+        var isLockedPrompt = isTemplateMode && f.key === 'prompt' && !!nodeInfo.data.template;
+        var isLockedRevision = isTemplateMode && f.key === 'retry_revision_prompt' && !!nodeInfo.data.retry_revision_template;
+        var isLocked = isLockedPrompt || isLockedRevision;
+
+        if (isLockedPrompt) {
+          input.value = TEMPLATE_TEXTS[nodeInfo.data.template] || '';
+          input.disabled = true;
+        } else if (isLockedRevision) {
+          input.value = TEMPLATE_TEXTS[nodeInfo.data.retry_revision_template] || '';
+          input.disabled = true;
+        } else {
+          input.value = nodeInfo.data[f.key] || '';
+        }
+
+        input.addEventListener('change', function() {
+          updateNodeData(nodeId, f.key, this.value);
+          if (isTemplateMode && f.key === 'prompt') {
+            rebuildVariableMappingFromPrompt(nodeId, fieldsDiv);
+            updateNodeHtml(nodeId);
+          }
+        });
+        // Live variable detection as user types (debounced)
+        if (isTemplateMode && f.key === 'prompt') {
+          var debounceTimer = null;
+          input.addEventListener('input', function() {
+            clearTimeout(debounceTimer);
+            var ta = this;
+            debounceTimer = setTimeout(function() {
+              updateNodeData(nodeId, 'prompt', ta.value);
+              rebuildVariableMappingFromPrompt(nodeId, fieldsDiv);
+            }, 500);
+          });
+        }
+
+        // Upstream variable chips — only when prompt is editable (not locked to preset)
+        if (isTemplateMode && f.key === 'prompt' && !isLocked) {
+          var chipsDiv = buildUpstreamChips(nodeId, input);
+          if (chipsDiv) fieldsDiv.appendChild(chipsDiv);
+        }
+
+        // Wrap textarea with expand button
+        var taWrap = document.createElement('div');
+        taWrap.className = 'textarea-wrap';
+        var expandBtn = document.createElement('button');
+        expandBtn.type = 'button';
+        expandBtn.className = 'btn-expand-ta';
+        expandBtn.textContent = 'Expand';
+        expandBtn.title = 'Open in fullscreen editor';
+        (function(ta, fieldKey, fieldLabel) {
+          expandBtn.addEventListener('click', function() {
+            openTextareaModal(ta, fieldLabel, nodeId, fieldKey);
+          });
+        })(input, f.key, f.label);
+        taWrap.appendChild(expandBtn);
+        taWrap.appendChild(input);
+        fieldsDiv.appendChild(taWrap);
+
+        // Add "Customize" button for preset-locked textareas
+        if (isTemplateMode && (f.key === 'prompt' || f.key === 'retry_revision_prompt')) {
+          var btnClass = f.key === 'prompt' ? 'btn-customize-prompt' : 'btn-customize-revision';
+          var presetField = f.key === 'prompt' ? 'template' : 'retry_revision_template';
+          var custBtn = document.createElement('button');
+          custBtn.className = 'btn-sm ' + btnClass;
+          custBtn.textContent = 'Customize';
+          custBtn.style.marginTop = '0.3rem';
+          custBtn.style.display = isLocked ? '' : 'none';
+          (function(textareaEl, presetKey, buttonEl, promptKey) {
+            buttonEl.addEventListener('click', function() {
+              // Save displayed text as inline prompt
+              updateNodeData(nodeId, promptKey, textareaEl.value);
+              // Clear the preset dropdown
+              updateNodeData(nodeId, presetKey, '');
+              var selEl = fieldsDiv.querySelector('select[data-field="' + presetKey + '"]');
+              if (selEl) selEl.value = '';
+              // Enable textarea, hide button
+              textareaEl.disabled = false;
+              buttonEl.style.display = 'none';
+              if (promptKey === 'prompt') {
+                // Add upstream chips now that textarea is editable
+                var existingChips = fieldsDiv.querySelector('.var-chips');
+                if (!existingChips) {
+                  var chipsDiv = buildUpstreamChips(nodeId, textareaEl);
+                  if (chipsDiv) textareaEl.parentNode.insertBefore(chipsDiv, textareaEl);
+                }
+                rebuildVariableMappingFromPrompt(nodeId, fieldsDiv);
+              }
+              updateNodeHtml(nodeId);
+            });
+          })(input, presetField, custBtn, f.key);
+          fieldsDiv.appendChild(custBtn);
+          return; // already appended textarea + button
+        }
+      } else if (f.field_type === 'checkbox') {
+        const row = document.createElement('div');
+        row.className = 'checkbox-row';
+        input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = !!nodeInfo.data[f.key];
+        input.addEventListener('change', function() {
+          updateNodeData(nodeId, f.key, this.checked);
+          updateNodeHtml(nodeId);
+        });
+        const span = document.createElement('span');
+        span.textContent = f.label;
+        span.style.fontSize = '0.82rem';
+        if (f.hint) span.title = f.hint;
+        row.appendChild(input);
+        row.appendChild(span);
+        fieldsDiv.appendChild(row);
+        if (f.hint) {
+          var cbHint = document.createElement('div');
+          cbHint.style.cssText = 'font-size:0.7rem;color:var(--text-muted);margin:0.1rem 0 0.3rem 1.5rem;line-height:1.35;font-weight:400;text-transform:none;letter-spacing:0';
+          cbHint.textContent = f.hint;
+          fieldsDiv.appendChild(cbHint);
+        }
+        return; // skip appending input directly
+      } else if (f.field_type === 'multi_select') {
+        // Multi-select checkboxes — e.g. context_files from shared file_writers in previous phases
+        var listDiv = document.createElement('div');
+        listDiv.className = 'multi-select-list';
+        var sharedFiles = getAvailableSharedFiles();
+        var currentVal = (nodeInfo.data[f.key] || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+        if (sharedFiles.length === 0) {
+          var emptyMsg = document.createElement('div');
+          emptyMsg.className = 'multi-select-empty';
+          emptyMsg.textContent = 'No shared files from previous phases';
+          listDiv.appendChild(emptyMsg);
+        } else {
+          sharedFiles.forEach(function(sf) {
+            var item = document.createElement('label');
+            item.className = 'multi-select-item';
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.value = sf;
+            cb.checked = currentVal.indexOf(sf) !== -1;
+            cb.addEventListener('change', function() {
+              syncMultiSelect(nodeId, f.key, listDiv);
+            });
+            var span = document.createElement('span');
+            span.textContent = sf;
+            item.appendChild(cb);
+            item.appendChild(span);
+            listDiv.appendChild(item);
+          });
+        }
+        fieldsDiv.appendChild(listDiv);
+        return; // skip appending input directly
+      } else {
+        input = document.createElement('input');
+        input.type = 'text';
+        input.dataset.field = f.key;
+        input.value = nodeInfo.data[f.key] || '';
+        // Conditional: disable condition_value when task_failed is active
+        if (typeId === 'conditional' && f.key === 'condition_value' && nodeInfo.data.condition_type === 'task_failed') {
+          input.disabled = true;
+        }
+        input.addEventListener('change', function() {
+          updateNodeData(nodeId, f.key, this.value);
+        });
+      }
+      fieldsDiv.appendChild(input);
+    });
+
+    // Visual variable mapping for prompt_template nodes
+    if (isTemplateMode) {
+      rebuildVariableMappingFromPrompt(nodeId, fieldsDiv);
+    }
+  }
+
+  // ----------------------------------------------------------------
+  // Visual variable mapping for prompt_template nodes
+  // ----------------------------------------------------------------
+
+  // Client-side variable extraction from prompt text
+  var _INTERNAL_VARS = { issues: true, previous_plan_text: true };
+  var _AUTO_VARS_SET = { description: true, expert_options: true };
+
+  function extractVariablesFromText(promptText) {
+    // Strip double-brace escapes so they don't look like vars
+    var cleaned = (promptText || '').replace(/\{\{|\}\}/g, '');
+    var matches = cleaned.match(/\{(\w+)\}/g) || [];
+    var seen = {};
+    var result = [];
+    matches.forEach(function(m) {
+      var name = m.slice(1, -1);
+      if (_INTERNAL_VARS[name] || seen[name]) return;
+      seen[name] = true;
+      result.push({ name: name, auto: !!_AUTO_VARS_SET[name] });
+    });
+    return result;
+  }
+
+  function rebuildVariableMappingFromPrompt(nodeId, fieldsDiv) {
+    var nodeInfo = getNodeScoped(nodeId);
+    if (!nodeInfo) return;
+    var promptText = (nodeInfo.data.prompt || '').trim();
+    var vars;
+    if (promptText) {
+      // Derive variables from inline prompt text
+      vars = extractVariablesFromText(promptText);
+    } else {
+      // Fall back to preset template variable lookup
+      var templateName = nodeInfo.data.template || '';
+      vars = TEMPLATE_VARS[templateName] || null;
+    }
+    renderVariableMappingFromVars(nodeId, vars, fieldsDiv);
+  }
+
+  function renderVariableMappingFromVars(nodeId, vars, fieldsDiv) {
+    // Remove previous mapping UI if any
+    const prev = fieldsDiv.querySelector('.var-mapping');
+    if (prev) prev.remove();
+
+    if (!vars || vars.length === 0) {
+      const wrap = document.createElement('div');
+      wrap.className = 'var-mapping';
+      const note = document.createElement('div');
+      note.className = 'var-no-vars';
+      note.textContent = 'Write a prompt with {variables} or load a preset';
+      wrap.appendChild(note);
+      fieldsDiv.appendChild(wrap);
+      return;
+    }
+
+    const nodeInfo = getNodeScoped(nodeId);
+    const currentMap = parseVarMap(nodeInfo ? nodeInfo.data.variable_map : '{}');
+    const manualVars = vars.filter(function(v) { return !v.auto; });
+    const autoVars = vars.filter(function(v) { return v.auto; });
+
+    const wrap = document.createElement('div');
+    wrap.className = 'var-mapping';
+
+    // Manual variables — dropdowns
+    if (manualVars.length > 0) {
+      const hdr = document.createElement('div');
+      hdr.className = 'var-section-label';
+      hdr.textContent = 'Variable Sources';
+      wrap.appendChild(hdr);
+
+      const sources = getNodeSourceOptions(nodeId);
+
+      manualVars.forEach(function(v) {
+        const row = document.createElement('div');
+        row.className = 'var-row';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'var-name';
+        nameSpan.textContent = v.name;
+        nameSpan.title = v.name;
+        row.appendChild(nameSpan);
+
+        const arrow = document.createElement('span');
+        arrow.className = 'var-arrow';
+        arrow.textContent = '\u2190';
+        row.appendChild(arrow);
+
+        const sel = document.createElement('select');
+        const emptyOpt = document.createElement('option');
+        emptyOpt.value = '';
+        emptyOpt.textContent = '-- select --';
+        sel.appendChild(emptyOpt);
+
+        sources.forEach(function(src) {
+          if (src.group) {
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = src.group;
+            src.items.forEach(function(item) {
+              const opt = document.createElement('option');
+              opt.value = item.value;
+              opt.textContent = item.label;
+              if (currentMap[v.name] === item.value) opt.selected = true;
+              optgroup.appendChild(opt);
+            });
+            sel.appendChild(optgroup);
+          } else {
+            const opt = document.createElement('option');
+            opt.value = src.value;
+            opt.textContent = src.label;
+            if (currentMap[v.name] === src.value) opt.selected = true;
+            sel.appendChild(opt);
+          }
+        });
+
+        sel.addEventListener('change', function() {
+          syncVarMapFromUI(nodeId, manualVars, wrap);
+        });
+        row.appendChild(sel);
+        wrap.appendChild(row);
+      });
+    }
+
+    // Auto-injected variables
+    if (autoVars.length > 0) {
+      const hdr = document.createElement('div');
+      hdr.className = 'var-section-label';
+      hdr.textContent = 'Auto-injected';
+      wrap.appendChild(hdr);
+
+      autoVars.forEach(function(v) {
+        const row = document.createElement('div');
+        row.className = 'var-auto-row';
+        row.innerHTML = '<span class="var-check">\u2713</span>' +
+          '<span class="var-auto-name">' + v.name + '</span>' +
+          '<span class="var-auto-hint">' + (AUTO_HINTS[v.name] || '') + '</span>';
+        wrap.appendChild(row);
+      });
+    }
+
+    if (manualVars.length === 0 && autoVars.length === 0) {
+      const note = document.createElement('div');
+      note.className = 'var-no-vars';
+      note.textContent = 'No configurable variables in this prompt';
+      wrap.appendChild(note);
+    }
+
+    fieldsDiv.appendChild(wrap);
+  }
+
+  function toVarName(source) {
+    // "Output Parser.requirements" → "requirements"
+    // "Interview" → "interview"
+    // "Research: Stack" → "research_stack"
+    var name = source;
+    if (name.indexOf('.') !== -1) name = name.split('.').pop();
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  }
+
+  function getUpstreamSources(nodeId) {
+    // Get direct upstream connections for this node
+    var nodeInfo = getNodeScoped(nodeId);
+    if (!nodeInfo || !nodeInfo.inputs) return [];
+    var upstreamIds = [];
+    for (var port in nodeInfo.inputs) {
+      var conns = nodeInfo.inputs[port].connections || [];
+      conns.forEach(function(c) { upstreamIds.push(c.node); });
+    }
+
+    var sources = [];
+    var exported = editor.export();
+    var data = (exported.drawflow && exported.drawflow[currentModule] && exported.drawflow[currentModule].data) || {};
+
+    upstreamIds.forEach(function(uid) {
+      var node = data[uid];
+      if (!node) return;
+      var name = (node.data && node.data.name) || node.name || ('Node ' + uid);
+      var nodeType = node.name;
+      if (nodeType === 'output_parser') {
+        var sections = ((node.data && node.data.section_names) || '').split('\n').filter(Boolean);
+        sections.forEach(function(s) {
+          s = s.trim();
+          if (s) sources.push({ label: name + ' \u2192 ' + s, source: name + '.' + s, varName: toVarName(s) });
+        });
+      } else {
+        sources.push({ label: name, source: name, varName: toVarName(name) });
+      }
+    });
+    return sources;
+  }
+
+  function buildUpstreamChips(nodeId, textareaEl) {
+    var sources = getUpstreamSources(nodeId);
+    if (sources.length === 0) return null;
+
+    var wrap = document.createElement('div');
+    wrap.className = 'var-chips';
+    var label = document.createElement('div');
+    label.className = 'var-chips-label';
+    label.textContent = 'Insert from upstream';
+    wrap.appendChild(label);
+
+    var list = document.createElement('div');
+    list.className = 'var-chips-list';
+
+    sources.forEach(function(src) {
+      var chip = document.createElement('span');
+      chip.className = 'var-chip';
+      chip.innerHTML = '{' + src.varName + '} <span class="chip-src">' + src.label + '</span>';
+      chip.title = 'Click to insert {' + src.varName + '} mapped to ' + src.source;
+      chip.addEventListener('click', function() {
+        if (textareaEl.disabled) return;
+        // Insert at cursor
+        var start = textareaEl.selectionStart || textareaEl.value.length;
+        var end = textareaEl.selectionEnd || start;
+        var text = textareaEl.value;
+        var insert = '{' + src.varName + '}';
+        textareaEl.value = text.substring(0, start) + insert + text.substring(end);
+        textareaEl.selectionStart = textareaEl.selectionEnd = start + insert.length;
+        textareaEl.focus();
+
+        // Save to node data
+        updateNodeData(nodeId, 'prompt', textareaEl.value);
+
+        // Add mapping: varName → source
+        var nodeInfo = getNodeScoped(nodeId);
+        var currentMap = parseVarMap(nodeInfo ? nodeInfo.data.variable_map : '{}');
+        currentMap[src.varName] = src.source;
+        updateNodeData(nodeId, 'variable_map', JSON.stringify(currentMap));
+
+        // Rebuild variable mapping UI
+        var fieldsDiv = document.getElementById('config-fields');
+        rebuildVariableMappingFromPrompt(nodeId, fieldsDiv);
+      });
+      list.appendChild(chip);
+    });
+
+    wrap.appendChild(list);
+    return wrap;
+  }
+
+  function getNodeSourceOptions(excludeNodeId) {
+    // Get all nodes in the graph, grouped by type
+    const exported = editor.export();
+    const data = (exported.drawflow && exported.drawflow[currentModule] && exported.drawflow[currentModule].data) || {};
+    const sources = [];
+
+    for (var id in data) {
+      if (id == excludeNodeId) continue;
+      var node = data[id];
+      var name = (node.data && node.data.name) || node.name || ('Node ' + id);
+      var nodeType = node.name; // Drawflow type
+
+      if (nodeType === 'output_parser') {
+        // Group: the parser itself + its sections
+        var sectionNames = ((node.data && node.data.section_names) || '').split('\n').filter(Boolean);
+        var items = [];
+        sectionNames.forEach(function(s) {
+          s = s.trim();
+          if (s) items.push({ value: name + '.' + s, label: '\u2192 ' + s });
+        });
+        if (items.length > 0) {
+          sources.push({ group: name, items: items });
+        } else {
+          sources.push({ value: name, label: name });
+        }
+      } else {
+        sources.push({ value: name, label: name });
+      }
+    }
+    return sources;
+  }
+
+  function parseVarMap(raw) {
+    if (!raw || raw === '{}') return {};
+    try {
+      var parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      return parsed || {};
+    } catch(e) { return {}; }
+  }
+
+  function updateVariableMapsOnRename(oldName, newName) {
+    // Scan all nodes in the graph and update variable_maps that reference oldName
+    var exported = editor.export();
+    var data = (exported.drawflow && exported.drawflow[currentModule] && exported.drawflow[currentModule].data) || {};
+    for (var id in data) {
+      var node = data[id];
+      var raw = (node.data && node.data.variable_map) || '';
+      if (!raw || raw === '{}') continue;
+      try {
+        var map = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        var changed = false;
+        for (var key in map) {
+          var val = map[key];
+          // Exact match: "Interview" → "Project Chat"
+          if (val === oldName) {
+            map[key] = newName;
+            changed = true;
+          }
+          // Dot notation: "Interview.section" → "Project Chat.section"
+          else if (val.indexOf(oldName + '.') === 0) {
+            map[key] = newName + val.substring(oldName.length);
+            changed = true;
+          }
+        }
+        if (changed) {
+          var nodeInfo = getNodeScoped(id);
+          if (nodeInfo) {
+            nodeInfo.data.variable_map = JSON.stringify(map);
+            updateNodeDataScoped(id, nodeInfo.data);
+          }
+        }
+      } catch(e) { /* skip unparseable */ }
+    }
+  }
+
+  function syncVarMapFromUI(nodeId, manualVars, wrapEl) {
+    var map = {};
+    var selects = wrapEl.querySelectorAll('.var-row select');
+    manualVars.forEach(function(v, i) {
+      var val = selects[i] ? selects[i].value : '';
+      if (val) map[v.name] = val;
+    });
+    updateNodeData(nodeId, 'variable_map', JSON.stringify(map));
+    // Keep inject flags in sync with auto vars
+    updateNodeData(nodeId, 'inject_description', true);
+    updateNodeData(nodeId, 'inject_expert_options', true);
+  }
+
+  /** Module-scoped data update — writes directly to current module's node. */
+  function updateNodeDataScoped(nodeId, data) {
+    var mod = editor.module;
+    try {
+      editor.drawflow.drawflow[mod].data[String(nodeId)].data = data;
+    } catch(e) {}
+    // Also try Drawflow's built-in (works for single-module)
+    try { editor.updateNodeDataFromId(nodeId, data); } catch(e2) {}
+  }
+
+  function updateNodeData(nodeId, key, value) {
+    const nodeInfo = getNodeScoped(nodeId);
+    if (!nodeInfo) return;
+    pushUndo();
+    nodeInfo.data[key] = value;
+    updateNodeDataScoped(nodeId, nodeInfo.data);
+    validateAllNodes();
+    // Update phase tab label when phase_name changes
+    if (key === 'phase_name' && nodeInfo.name === 'phase_settings') {
+      renderPhaseTabs();
+    }
+    // Re-derive ${VAR} requirements if this field is substitution-eligible
+    const subFields = (window.SUBSTITUTABLE_FIELDS_REGISTRY || {})[nodeInfo.name] || [];
+    if (subFields.includes(key)) {
+      refreshRequiredEnvVarsPanel();
+    }
+  }
+
+  // Re-derive the "Required Env Vars" panel from the current Drawflow state.
+  // Mirrors taktis.core.env_vars.SUBSTITUTABLE_FIELDS on the server.
+  const SUBSTITUTABLE_FIELDS = {
+    api_call: ['url', 'headers', 'body_template'],
+    agent: ['prompt', 'retry_revision_prompt'],
+    fan_out: ['prompt'],
+    llm_router: ['routing_prompt'],
+    file_writer: ['filename'],
+    text_transform: ['value'],
+    aggregator: ['header', 'separator'],
+    pipeline_generator: ['target_template_name'],
+  };
+  // Expose for updateNodeData to consult without re-importing
+  window.SUBSTITUTABLE_FIELDS_REGISTRY = SUBSTITUTABLE_FIELDS;
+  function deriveRequiredEnvVars() {
+    if (!editor || !editor.drawflow) return [];
+    const found = new Set();
+    const re = /\$\{(\w+)\}/g;
+    const drawflow = editor.drawflow.drawflow || {};
+    for (const mod of Object.values(drawflow)) {
+      const nodes = (mod && mod.data) || {};
+      for (const node of Object.values(nodes)) {
+        if (!node) continue;
+        const fields = SUBSTITUTABLE_FIELDS[node.name] || [];
+        if (!fields.length) continue;
+        const data = node.data || {};
+        for (const f of fields) {
+          const v = data[f];
+          if (typeof v !== 'string' || !v) continue;
+          re.lastIndex = 0;
+          let m;
+          while ((m = re.exec(v))) found.add(m[1]);
+        }
+      }
+    }
+    return [...found].sort();
+  }
+
+  function refreshRequiredEnvVarsPanel() {
+    const wrap = document.getElementById('env-vars-required');
+    const list = document.getElementById('env-vars-required-list');
+    if (!wrap || !list) return;
+    const vars = deriveRequiredEnvVars();
+    if (!vars.length) { wrap.style.display = 'none'; list.innerHTML = ''; return; }
+    wrap.style.display = '';
+    list.innerHTML = vars.map(v => '<li>${' + v + '}</li>').join('');
+  }
+  // Expose for hooks elsewhere (loadTemplate, node removal, etc.)
+  window._refreshRequiredEnvVarsPanel = refreshRequiredEnvVarsPanel;
+
+  function getAvailableSharedFiles() {
+    // Scan file_writers with context_priority set (not "none") in PREVIOUS modules (not current)
+    var exported = editor.export();
+    var files = [];
+    var curIdx = phaseModules.indexOf(currentModule);
+    for (var i = 0; i < curIdx; i++) {
+      var mod = phaseModules[i];
+      var modData = (exported.drawflow && exported.drawflow[mod] && exported.drawflow[mod].data) || {};
+      for (var id in modData) {
+        var node = modData[id];
+        if (node.name === 'file_writer' && node.data) {
+          var priority = node.data.context_priority || 'none';
+          if (priority !== 'none') {
+            var path = getFileWriterPath(node.data);
+            if (path) files.push(path);
+          }
+        }
+      }
+    }
+    return files;
+  }
+
+  function getFileWriterPath(data) {
+    var target = data.file_target || 'research_file';
+    var filename = (data.filename || '').trim();
+    if (target === 'requirements') return 'REQUIREMENTS.md';
+    if (target === 'roadmap') return 'ROADMAP.md';
+    if (target === 'verification') return 'VERIFICATION.md';
+    if (target === 'research_file' && filename) return 'research/' + filename;
+    if (target === 'custom' && filename) return filename;
+    return null;
+  }
+
+  function syncMultiSelect(nodeId, key, listDiv) {
+    var checkboxes = listDiv.querySelectorAll('input[type="checkbox"]');
+    var selected = [];
+    checkboxes.forEach(function(cb) {
+      if (cb.checked) selected.push(cb.value);
+    });
+    updateNodeData(nodeId, key, selected.join(','));
+  }
+
+  function updateNodeHtml(nodeId) {
+    const nodeInfo = getNodeScoped(nodeId);
+    if (!nodeInfo) return;
+    var typeId = nodeInfo.name;
+    var nt = NT_BY_ID[typeId];
+    if (!nt) return;
+    var name = nodeInfo.data.name || nt.label;
+    var subtitle = getNodeSubtitle(typeId, nodeInfo.data);
+    var htmlStr = '<div class="pipeline-node" data-tooltip="' + typeId + '" style="border-left-color:' + nt.color + '">' +
+      '<span class="validation-badge"></span>' +
+      '<div class="node-title">' + escapeHtml(name) + '</div>' +
+      '<div class="node-subtitle">' + escapeHtml(subtitle) + '</div></div>';
+    // Update Drawflow's internal html so module switches re-render correctly
+    var nodeMod = editor.getModuleFromNodeId(nodeId);
+    if (nodeMod && editor.drawflow.drawflow[nodeMod] && editor.drawflow.drawflow[nodeMod].data[nodeId]) {
+      editor.drawflow.drawflow[nodeMod].data[nodeId].html = htmlStr;
+    }
+    // Update the visible DOM if this node is currently rendered
+    var el = container.querySelector('#node-' + nodeId + ' .pipeline-node');
+    if (el) {
+      el.querySelector('.node-title').textContent = name;
+      el.querySelector('.node-subtitle').textContent = subtitle;
+    }
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  /** Rebuild HTML for every node in every module (internal data only).
+   *  Call this after importing a template where nodes have empty html. */
+  function rebuildAllNodeHtml() {
+    var dfData = editor.drawflow.drawflow;
+    for (var modName in dfData) {
+      if (!dfData[modName] || !dfData[modName].data) continue;
+      for (var nid in dfData[modName].data) {
+        var node = dfData[modName].data[nid];
+        var typeId = node.name;
+        var nt = NT_BY_ID[typeId];
+        if (!nt) continue;
+        var name = (node.data && node.data.name) || nt.label;
+        var subtitle = getNodeSubtitle(typeId, node.data || {});
+        node.html = '<div class="pipeline-node" data-tooltip="' + typeId + '" style="border-left-color:' + nt.color + '">' +
+          '<span class="validation-badge"></span>' +
+          '<div class="node-title">' + escapeHtml(name) + '</div>' +
+          '<div class="node-subtitle">' + escapeHtml(subtitle) + '</div></div>';
+      }
+    }
+  }
+
+  /** Compute subtitle text for a node given its type and data. */
+  // ----------------------------------------------------------------
+  // Fullscreen textarea modal
+  // ----------------------------------------------------------------
+  var _taModalSource = null;  // the inline textarea being edited
+  var _taModalNodeId = null;
+  var _taModalFieldKey = null;
+
+  function openTextareaModal(sourceTextarea, title, nodeId, fieldKey) {
+    _taModalSource = sourceTextarea;
+    _taModalNodeId = nodeId;
+    _taModalFieldKey = fieldKey;
+    document.getElementById('ta-modal-title').textContent = title || 'Edit';
+    var editor = document.getElementById('ta-modal-editor');
+    editor.value = sourceTextarea.value;
+    editor.disabled = sourceTextarea.disabled;
+    document.getElementById('ta-modal-overlay').classList.add('active');
+    editor.focus();
+  }
+
+  document.getElementById('ta-modal-done').addEventListener('click', function() {
+    if (_taModalSource) {
+      var newVal = document.getElementById('ta-modal-editor').value;
+      _taModalSource.value = newVal;
+      if (!_taModalSource.disabled && _taModalNodeId != null) {
+        updateNodeData(_taModalNodeId, _taModalFieldKey, newVal);
+        updateNodeHtml(_taModalNodeId);
+      }
+    }
+    document.getElementById('ta-modal-overlay').classList.remove('active');
+    _taModalSource = null;
+  });
+
+  document.getElementById('ta-modal-overlay').addEventListener('click', function(e) {
+    if (e.target === this) {
+      document.getElementById('ta-modal-done').click();
+    }
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('ta-modal-overlay').classList.contains('active')) {
+      document.getElementById('ta-modal-done').click();
+    }
+  });
+
+  function getNodeSubtitle(typeId, data) {
+    if (typeId === 'agent') {
+      var agentMode = data.mode || 'standard';
+      if (agentMode === 'template') return data.expert || data.template || 'unconfigured';
+      return data.expert || (data.prompt ? 'custom prompt' : 'unconfigured');
+    } else if (typeId === 'output_parser') {
+      var count = (data.section_names || '').split('\n').filter(Boolean).length;
+      return count + ' sections';
+    } else if (typeId === 'file_writer') {
+      var s = data.filename || 'unconfigured';
+      if ((data.context_priority || 'none') !== 'none') s += ' (in context)';
+      return s;
+    } else if (typeId === 'phase_settings') {
+      return data.phase_name || 'unconfigured';
+    } else if (typeId === 'plan_applier') {
+      return data.await_approval ? 'with approval' : 'auto-apply';
+    } else if (typeId === 'conditional') {
+      var ct = data.condition_type || 'contains';
+      var cv = data.condition_value || '';
+      return ct + (cv ? ': ' + cv.substring(0, 30) : '');
+    } else if (typeId === 'api_call') {
+      var method = data.method || 'GET';
+      var url = data.url || '';
+      return url ? method + ' ' + url.substring(0, 30) : 'unconfigured';
+    } else if (typeId === 'aggregator') {
+      return data.strategy || 'concat';
+    } else if (typeId === 'human_gate') {
+      return data.gate_message ? 'gate configured' : 'awaits approval';
+    } else if (typeId === 'llm_router') {
+      var rc = data.route_count || '2';
+      return rc + ' routes (' + (data.model || 'haiku') + ')';
+    } else if (typeId === 'text_transform') {
+      return data.operation || 'prepend';
+    } else if (typeId === 'fan_out') {
+      return (data.split_mode || 'newline') + ' split';
+    } else if (typeId === 'loop') {
+      return (data.condition_type || 'not_contains') + ' (max ' + (data.max_iterations || '3') + ')';
+    } else if (typeId === 'pipeline_generator') {
+      return data.template_name_prefix ? data.template_name_prefix + ': ...' : 'generate template';
+    }
+    return 'unconfigured';
+  }
+
+  // ----------------------------------------------------------------
+  // Wave computation (Kahn's algorithm) — updates wave badges on all nodes
+  // ----------------------------------------------------------------
+  function recomputeWaves() {
+    var exported = editor.export();
+    var data = (exported.drawflow && exported.drawflow[currentModule] && exported.drawflow[currentModule].data) || {};
+    var ids = Object.keys(data);
+    if (ids.length === 0) return;
+
+    // Build adjacency: upstream list + in-degree per node
+    var inDegree = {};
+    var upstream = {};
+    var waveOf = {};
+    ids.forEach(function(id) { inDegree[id] = 0; upstream[id] = []; waveOf[id] = 1; });
+
+    ids.forEach(function(id) {
+      var outputs = data[id].outputs || {};
+      for (var port in outputs) {
+        (outputs[port].connections || []).forEach(function(c) {
+          var tid = String(c.node);
+          if (inDegree[tid] !== undefined) {
+            inDegree[tid]++;
+            upstream[tid].push(id);
+          }
+        });
+      }
+    });
+
+    // Instant node types (no LLM, execute synchronously)
+    var INSTANT_TYPES = { output_parser: true, file_writer: true, plan_applier: true, aggregator: true, api_call: true, human_gate: true, text_transform: true, pipeline_generator: true };
+
+    // BFS — Kahn's
+    var queue = [];
+    ids.forEach(function(id) { if (inDegree[id] === 0) queue.push(id); });
+
+    while (queue.length > 0) {
+      var id = queue.shift();
+      var outputs = data[id].outputs || {};
+      for (var port in outputs) {
+        (outputs[port].connections || []).forEach(function(c) {
+          var tid = String(c.node);
+          if (inDegree[tid] === undefined) return;
+          waveOf[tid] = Math.max(waveOf[tid], waveOf[id] + 1);
+          inDegree[tid]--;
+          if (inDegree[tid] === 0) queue.push(tid);
+        });
+      }
+    }
+
+    // Collapse instant nodes into their parent's wave for display.
+    // If all upstreams are from the same wave, show this instant node in that wave.
+    ids.forEach(function(id) {
+      var nodeType = data[id].name;
+      if (!INSTANT_TYPES[nodeType]) return;
+      var ups = upstream[id];
+      if (ups.length === 0) return;
+      var maxUpWave = 0;
+      ups.forEach(function(uid) { maxUpWave = Math.max(maxUpWave, waveOf[uid]); });
+      waveOf[id] = maxUpWave;
+    });
+
+    // Renumber to remove gaps (e.g. W1, W2, W4 → W1, W2, W3)
+    var usedWaves = [];
+    ids.forEach(function(id) {
+      if (usedWaves.indexOf(waveOf[id]) === -1) usedWaves.push(waveOf[id]);
+    });
+    usedWaves.sort(function(a, b) { return a - b; });
+    var waveRemap = {};
+    usedWaves.forEach(function(w, i) { waveRemap[w] = i + 1; });
+    ids.forEach(function(id) { waveOf[id] = waveRemap[waveOf[id]]; });
+
+    // Update wave badges on canvas nodes
+    ids.forEach(function(id) {
+      var el = container.querySelector('#node-' + id + ' .pipeline-node');
+      if (!el) return;
+      var badge = el.querySelector('.node-wave');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'node-wave';
+        el.style.position = 'relative';
+        el.appendChild(badge);
+      }
+      badge.textContent = 'W' + waveOf[id];
+    });
+  }
+
+  // ----------------------------------------------------------------
+  // Undo/Redo history stack
+  // ----------------------------------------------------------------
+  var undoStack = [];
+  var redoStack = [];
+  var MAX_UNDO = 30;
+  var _isUndoRedo = false;
+
+  function pushUndo() {
+    if (_isUndoRedo) return;
+    undoStack.push(JSON.stringify(editor.export()));
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack = [];
+  }
+
+  function undo() {
+    if (undoStack.length === 0) return;
+    _isUndoRedo = true;
+    redoStack.push(JSON.stringify(editor.export()));
+    var state = JSON.parse(undoStack.pop());
+    editor.import(state);
+    recomputeWaves();
+    validateAllNodes();
+    _isUndoRedo = false;
+    hideConfigPanel();
+  }
+
+  function redo() {
+    if (redoStack.length === 0) return;
+    _isUndoRedo = true;
+    undoStack.push(JSON.stringify(editor.export()));
+    var state = JSON.parse(redoStack.pop());
+    editor.import(state);
+    recomputeWaves();
+    validateAllNodes();
+    _isUndoRedo = false;
+    hideConfigPanel();
+  }
+
+  // ----------------------------------------------------------------
+  // Node duplication (Ctrl+D)
+  // ----------------------------------------------------------------
+  function duplicateSelectedNode() {
+    if (!selectedNodeId) return;
+    var nodeInfo = getNodeScoped(selectedNodeId);
+    if (!nodeInfo) return;
+    if (nodeInfo.name === 'phase_settings') return;
+
+    var nt = NT_BY_ID[nodeInfo.name];
+    if (!nt) return;
+
+    var newData = JSON.parse(JSON.stringify(nodeInfo.data));
+    newData.name = (newData.name || nt.label) + ' Copy';
+
+    var html = '<div class="pipeline-node" data-tooltip="' + nodeInfo.name + '" style="border-left-color:' + nt.color + '">' +
+      '<span class="validation-badge"></span>' +
+      '<div class="node-title">' + nt.label + '</div>' +
+      '<div class="node-subtitle">' + (newData.name || 'unconfigured') + '</div></div>';
+
+    pushUndo();
+    editor.addNode(
+      nodeInfo.name,
+      nt.inputs, nt.outputs,
+      nodeInfo.pos_x + 40, nodeInfo.pos_y + 40,
+      nodeInfo.name,
+      newData,
+      html
+    );
+    recomputeWaves();
+    validateAllNodes();
+  }
+
+  // ----------------------------------------------------------------
+  // Validation badges — red dot on misconfigured nodes
+  // ----------------------------------------------------------------
+  function validateAllNodes() {
+    var flow = editor.export();
+    var modData = flow.drawflow[currentModule] ? flow.drawflow[currentModule].data : {};
+    Object.keys(modData).forEach(function(id) {
+      var node = modData[id];
+      var nt = NT_BY_ID[node.name];
+      if (!nt) return;
+      var missing = false;
+      nt.config_schema.forEach(function(field) {
+        if (field.required) {
+          var val = node.data[field.key];
+          if (val === undefined || val === null || val === '') missing = true;
+        }
+      });
+      var el = document.querySelector('#node-' + id + ' .validation-badge');
+      if (el) {
+        if (missing) el.classList.add('show');
+        else el.classList.remove('show');
+      }
+    });
+  }
+
+  // ----------------------------------------------------------------
+  // Keyboard shortcuts
+  // ----------------------------------------------------------------
+  document.addEventListener('keydown', function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+    if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+    if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
+    if (e.ctrlKey && e.key === 'd') { e.preventDefault(); duplicateSelectedNode(); }
+  });
+
+  // Recompute on connection changes
+  editor.on('connectionCreated', function() { pushUndo(); recomputeWaves(); validateAllNodes(); });
+  editor.on('connectionRemoved', function() { pushUndo(); recomputeWaves(); validateAllNodes(); });
+  editor.on('import', function() { setTimeout(function() { recomputeWaves(); validateAllNodes(); renderPhaseTabs(); refreshRequiredEnvVarsPanel(); }, 100); });
+  editor.on('nodeCreated', function() { setTimeout(function() { pushUndo(); recomputeWaves(); validateAllNodes(); renderPhaseTabs(); refreshRequiredEnvVarsPanel(); }, 50); });
+  editor.on('nodeRemoved', function() { setTimeout(function() { pushUndo(); recomputeWaves(); validateAllNodes(); renderPhaseTabs(); refreshRequiredEnvVarsPanel(); }, 50); });
+
+  // ----------------------------------------------------------------
+  // Template management
+  // ----------------------------------------------------------------
+  window.newTemplate = function() {
+    clearAllModules();
+    currentTemplateId = null;
+    document.getElementById('template-select').value = '';
+    document.getElementById('template-name').value = '';
+    hideConfigPanel();
+    renderPhaseTabs();
+  };
+
+  window.loadTemplate = function(templateId) {
+    if (!templateId) { window.newTemplate(); return; }
+    fetch('/api/pipeline-templates', { headers: { 'Accept': 'application/json' } })
+      .then(function(r) { return r.json(); })
+      .then(function(list) {
+        const tmpl = list.find(function(t) { return t.id === templateId; });
+        if (!tmpl) { toast('Template not found', 'error'); return; }
+        currentTemplateId = tmpl.id;
+        document.getElementById('template-name').value = tmpl.name || '';
+        try {
+          const flow = typeof tmpl.flow_json === 'string' ? JSON.parse(tmpl.flow_json) : tmpl.flow_json;
+          // Remove all extra modules before importing
+          clearAllModules();
+          // Drawflow.import() calls load() for the current module (Home).
+          // If the imported flow lacks a Home module, load() crashes with
+          // "Cannot read properties of undefined (reading 'data')".
+          // Fix: inject an empty Home shim so import succeeds, then remove it.
+          var flowModules = Object.keys(flow.drawflow || {});
+          var needsHomeShim = flowModules.length > 0 && !flow.drawflow['Home'];
+          if (needsHomeShim) {
+            flow.drawflow['Home'] = { data: {} };
+          }
+          editor.import(flow);
+          // Remove the shim and switch to the first real module
+          if (needsHomeShim) {
+            var firstModule = flowModules[0];
+            editor.changeModule(firstModule);
+            editor.removeModule('Home');
+          }
+          // Detect modules from imported data
+          rebuildPhaseModulesFromExport();
+          setTimeout(function() {
+            // Rebuild node HTML in Drawflow's internal state for ALL modules.
+            // This ensures nodes render correctly when switching phase tabs.
+            rebuildAllNodeHtml();
+            // Re-render the current module so updated HTML appears on canvas
+            var cur = editor.module;
+            editor.changeModule(cur);
+            recomputeWaves();
+            renderPhaseTabs();
+          }, 100);
+        } catch(e) {
+          toast('Failed to parse flow: ' + e.message, 'error');
+        }
+        hideConfigPanel();
+      })
+      .catch(function(e) { toast('Load failed: ' + e.message, 'error'); });
+  };
+
+  window.saveTemplate = function() {
+    const name = document.getElementById('template-name').value.trim();
+    if (!name) { toast('Enter a template name', 'error'); return; }
+    const flow = editor.export();
+    const body = { name: name, flow_json: flow, description: '' };
+    const method = currentTemplateId ? 'PUT' : 'POST';
+    const url = currentTemplateId
+      ? '/api/pipeline-templates/' + currentTemplateId
+      : '/api/pipeline-templates';
+
+    fetch(url, {
+      method: method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrf(),
+      },
+      body: JSON.stringify(body),
+    })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(res) {
+      if (!res.ok) { toast(res.data.error || 'Save failed', 'error'); return; }
+      currentTemplateId = res.data.id;
+      toast('Template saved');
+      // Refresh template dropdown
+      refreshTemplateList(currentTemplateId);
+    })
+    .catch(function(e) { toast('Save failed: ' + e.message, 'error'); });
+  };
+
+  window.deleteTemplate = function() {
+    const sel = document.getElementById('template-select');
+    const id = sel.value;
+    if (!id) { toast('No template selected', 'error'); return; }
+    if (!confirm('Delete this template?')) return;
+    fetch('/api/pipeline-templates/' + id, {
+      method: 'DELETE',
+      headers: { 'X-CSRFToken': getCsrf() },
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.error) { toast(d.error, 'error'); return; }
+      toast('Template deleted');
+      window.newTemplate();
+      refreshTemplateList('');
+    })
+    .catch(function(e) { toast('Delete failed: ' + e.message, 'error'); });
+  };
+
+  window.cloneTemplate = function() {
+    var sel = document.getElementById('template-select');
+    if (!sel.value) { toast('Select a template to clone', 'warning'); return; }
+    var name = prompt('Name for the cloned pipeline:');
+    if (!name) return;
+    var flow = editor.export();
+    fetch('/api/pipeline-templates', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrf(),
+      },
+      body: JSON.stringify({ name: name, flow_json: flow, description: 'Cloned pipeline' })
+    })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(res) {
+      if (!res.ok) { toast(res.data.error || 'Clone failed', 'error'); return; }
+      toast('Pipeline cloned as "' + name + '"');
+      currentTemplateId = res.data.id;
+      document.getElementById('template-name').value = name;
+      refreshTemplateList(res.data.id);
+    })
+    .catch(function(e) { toast('Clone failed: ' + e.message, 'error'); });
+  };
+
+  function refreshTemplateList(selectId) {
+    fetch('/api/pipeline-templates', { headers: { 'Accept': 'application/json' } })
+      .then(function(r) { return r.json(); })
+      .then(function(list) {
+        const sel = document.getElementById('template-select');
+        sel.innerHTML = '<option value="">-- New Template --</option>';
+        list.forEach(function(t) {
+          const opt = document.createElement('option');
+          opt.value = t.id;
+          opt.textContent = t.name;
+          if (t.id === selectId) opt.selected = true;
+          sel.appendChild(opt);
+        });
+      });
+  }
+
+  // ----------------------------------------------------------------
+  // Run flow modal
+  // ----------------------------------------------------------------
+  window.openRunModal = function() {
+    document.getElementById('run-modal').classList.add('active');
+  };
+  window.closeRunModal = function() {
+    document.getElementById('run-modal').classList.remove('active');
+  };
+  window.executeFlow = function() {
+    const project = document.getElementById('run-project-select').value;
+    if (!project) { toast('Select a project', 'error'); return; }
+    const flow = editor.export();
+    const templateName = document.getElementById('template-name').value.trim() || 'Custom Flow';
+    fetch('/api/projects/' + encodeURIComponent(project) + '/execute-flow', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrf(),
+      },
+      body: JSON.stringify({
+        flow_json: flow,
+        template_name: templateName,
+        template_id: currentTemplateId || undefined,
+      }),
+    })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(res) {
+      if (!res.ok) { toast(res.data.error || 'Execution failed', 'error'); return; }
+      toast('Flow started! Redirecting...');
+      window.closeRunModal();
+      setTimeout(function() {
+        window.location.href = '/projects/' + encodeURIComponent(project);
+      }, 1000);
+    })
+    .catch(function(e) { toast('Execute failed: ' + e.message, 'error'); });
+  };
+
+  // Close modal on overlay click
+  document.getElementById('run-modal').addEventListener('click', function(ev) {
+    if (ev.target === this) window.closeRunModal();
+  });
+
+  // ----------------------------------------------------------------
+  // Node tooltips on hover
+  // ----------------------------------------------------------------
+  const tooltipEl = document.getElementById('node-tooltip');
+  let tooltipTimeout = null;
+
+  function showTooltip(typeId, anchorRect) {
+    const nt = NT_BY_ID[typeId];
+    if (!nt) return;
+    const catLabels = { agent: 'Agent — runs an LLM task', transform: 'Transform — processes data instantly', action: 'Action — writes files or creates DB records' };
+    tooltipEl.innerHTML =
+      '<div class="tt-label">' + nt.label + '</div>' +
+      '<div class="tt-cat">' + (catLabels[nt.category] || nt.category) + '</div>' +
+      '<div>' + nt.description + '</div>';
+
+    // Position: right of element, vertically centered
+    tooltipEl.style.left = (anchorRect.right + 10) + 'px';
+    tooltipEl.style.top = (anchorRect.top + anchorRect.height / 2 - 30) + 'px';
+
+    // Keep within viewport
+    tooltipEl.classList.add('visible');
+    requestAnimationFrame(function() {
+      const ttRect = tooltipEl.getBoundingClientRect();
+      if (ttRect.right > window.innerWidth - 8) {
+        // Show to the left instead
+        tooltipEl.style.left = (anchorRect.left - ttRect.width - 10) + 'px';
+      }
+      if (ttRect.bottom > window.innerHeight - 8) {
+        tooltipEl.style.top = (window.innerHeight - ttRect.height - 8) + 'px';
+      }
+    });
+  }
+
+  function hideTooltip() {
+    clearTimeout(tooltipTimeout);
+    tooltipTimeout = null;
+    tooltipEl.classList.remove('visible', 'interactive');
+  }
+
+  function showExpertTooltip(idOrName, anchorRect) {
+    var ex = EXPERTS.find(function(e) { return e.id === idOrName || e.name === idOrName; });
+    if (!ex) return;
+    var desc = ex.description || '';
+    var prompt = ex.system_prompt || '';
+    var safePrompt = prompt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // Scroll on inner div so scrollbar doesn't trigger mouseleave on outer tooltip
+    tooltipEl.innerHTML =
+      '<div class="tt-label">' + ex.name + '</div>' +
+      (desc ? '<div class="tt-cat">' + desc + '</div>' : '') +
+      (safePrompt ? '<div class="tt-scroll"><div style="white-space:pre-wrap;margin-top:0.3rem">' + safePrompt + '</div></div>' : '');
+    tooltipEl.classList.add('interactive');
+    tooltipEl.style.left = (anchorRect.right + 10) + 'px';
+    tooltipEl.style.top = (anchorRect.top) + 'px';
+    tooltipEl.classList.add('visible');
+    requestAnimationFrame(function() {
+      var ttRect = tooltipEl.getBoundingClientRect();
+      if (ttRect.right > window.innerWidth - 8) {
+        tooltipEl.style.left = (anchorRect.left - ttRect.width - 10) + 'px';
+      }
+      if (ttRect.bottom > window.innerHeight - 8) {
+        tooltipEl.style.top = (window.innerHeight - ttRect.height - 8) + 'px';
+      }
+    });
+  }
+
+  // --- Tooltip events ---
+  // Node tooltips: non-interactive (pointer-events:none), instant hide on leave
+  // Expert tooltips: interactive (pointer-events:auto), scrollable, stays while mouse inside
+
+  var tooltipHovered = false;
+
+  document.addEventListener('mouseenter', function(ev) {
+    if (!ev.target || !ev.target.closest) return;
+    var target = ev.target.closest('[data-tooltip]');
+    if (target) {
+      tooltipEl.classList.remove('interactive');
+      showTooltip(target.dataset.tooltip, target.getBoundingClientRect());
+      return;
+    }
+    var sel = ev.target.closest('[data-expert-select]');
+    if (sel && sel.value) {
+      showExpertTooltip(sel.value, sel.getBoundingClientRect());
+    }
+  }, true);
+
+  document.addEventListener('mouseleave', function(ev) {
+    if (!ev.target || !ev.target.closest) return;
+    var target = ev.target.closest('[data-tooltip]');
+    if (target) { hideTooltip(); return; }
+    var sel = ev.target.closest('[data-expert-select]');
+    if (sel) {
+      // Delay so user can move mouse into the tooltip
+      clearTimeout(tooltipTimeout);
+      tooltipTimeout = setTimeout(function() {
+        if (!tooltipHovered) hideTooltip();
+      }, 300);
+    }
+  }, true);
+
+  tooltipEl.addEventListener('mouseenter', function() {
+    tooltipHovered = true;
+    clearTimeout(tooltipTimeout);
+  });
+  tooltipEl.addEventListener('mouseleave', function() {
+    tooltipHovered = false;
+    hideTooltip();
+  });
+
+  // Hide on drag or canvas scroll (but not tooltip scroll)
+  document.addEventListener('dragstart', hideTooltip);
+
+  // ----------------------------------------------------------------
+  // Rebuild phase modules list from exported graph
+  // ----------------------------------------------------------------
+  function clearAllModules() {
+    // Remove all modules except Home, then clear Home
+    var exported = editor.export();
+    var modules = Object.keys(exported.drawflow || {});
+    // Switch to Home first
+    if (modules.indexOf('Home') !== -1) {
+      editor.changeModule('Home');
+    }
+    modules.forEach(function(mod) {
+      if (mod !== 'Home') {
+        try { editor.removeModule(mod); } catch(e) {}
+      }
+    });
+    editor.clear();
+    currentModule = 'Home';
+    phaseModules = ['Home'];
+    phaseCounter = 0;
+  }
+
+  function rebuildPhaseModulesFromExport() {
+    var exported = editor.export();
+    var drawflow = exported.drawflow || {};
+    phaseModules = Object.keys(drawflow);
+    if (phaseModules.length === 0) phaseModules = ['Home'];
+
+    // Figure out phaseCounter from module names
+    phaseCounter = 0;
+    phaseModules.forEach(function(mod) {
+      var m = mod.match(/^Phase_(\d+)$/);
+      if (m) phaseCounter = Math.max(phaseCounter, parseInt(m[1], 10));
+    });
+
+    // Set current module to first
+    currentModule = phaseModules[0];
+    editor.changeModule(currentModule);
+  }
+
+  // Initial render of phase tabs (hidden if single module with no phase_settings)
+  renderPhaseTabs();
+
+})();
+</script>
+{% endblock %}

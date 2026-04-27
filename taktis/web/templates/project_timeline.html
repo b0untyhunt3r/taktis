@@ -1,0 +1,713 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} Timeline — Taktis{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb" style="padding: 0.75rem 1.5rem 0;">
+  <a href="/">Dashboard</a> <span class="sep">/</span>
+  <a href="/projects">Projects</a> <span class="sep">/</span>
+  <a href="/projects/{{ project.name }}">{{ project.name }}</a> <span class="sep">/</span>
+  <span class="current">Timeline</span>
+</nav>
+
+<div class="tl-layout">
+  <!-- Sidebar navigation -->
+  <aside class="tl-sidebar">
+    <div class="tl-sidebar-inner">
+      <div class="tl-sidebar-header">Timeline</div>
+      {% for phase in timeline_phases %}
+      <div class="tl-nav-phase">
+        <a href="#phase-{{ phase.phase_number }}" class="tl-nav-phase-link" data-phase="{{ phase.phase_number }}">
+          <span class="tl-nav-status tl-nav-status-{{ phase.status | default('not_started') }}"></span>
+          <span class="tl-nav-label">Phase {{ phase.phase_number }}</span>
+        </a>
+        <div class="tl-nav-waves">
+          {% for wave in phase.waves %}
+          <a href="#phase-{{ phase.phase_number }}-wave-{{ wave.number }}" class="tl-nav-wave-link" data-phase="{{ phase.phase_number }}" data-wave="{{ wave.number }}">
+            W{{ wave.number }}
+            <span class="tl-nav-count">{{ wave.task_count }}</span>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      {% if not timeline_phases %}
+      <div style="padding:0.75rem; color:var(--text-muted); font-size:0.8rem;">No phases yet.</div>
+      {% endif %}
+    </div>
+  </aside>
+
+  <!-- Main timeline content -->
+  <main class="tl-main">
+    <div class="tl-header-bar">
+      <h1 class="tl-title">{{ project.name }}</h1>
+      <div class="tl-header-meta">
+        <span class="badge badge-{{ project.status | default('pending') }}">{{ project.status | default('pending') }}</span>
+        {% set total_cost = namespace(val=0) %}
+        {% for p in timeline_phases %}{% set total_cost.val = total_cost.val + (p.total_cost or 0) %}{% endfor %}
+        {% if total_cost.val > 0 %}
+        <span class="tl-meta-cost">${{ '{:.4f}'.format(total_cost.val) }}</span>
+        {% endif %}
+      </div>
+    </div>
+
+    {% for phase in timeline_phases %}
+    <div class="tl-phase" id="phase-{{ phase.phase_number }}">
+      <div class="tl-phase-header">
+        <div class="tl-phase-title">
+          <span class="tl-phase-num">Phase {{ phase.phase_number }}</span>
+          <span class="tl-phase-name">{{ phase.name }}</span>
+        </div>
+        <div class="tl-phase-meta">
+          <span class="badge badge-{{ phase.status | default('not_started') }}">{{ phase.status | default('not_started') }}</span>
+          <span class="tl-meta-tasks">{{ phase.task_count }} task{{ 's' if phase.task_count != 1 else '' }}</span>
+          {% if phase.total_cost and phase.total_cost > 0 %}
+          <span class="tl-meta-cost">${{ '{:.4f}'.format(phase.total_cost) }}</span>
+          {% endif %}
+        </div>
+      </div>
+      {% if phase.goal %}
+      <div class="tl-phase-goal">{{ phase.goal }}</div>
+      {% endif %}
+
+      {% for wave in phase.waves %}
+      <div class="tl-wave" id="phase-{{ phase.phase_number }}-wave-{{ wave.number }}">
+        <div class="tl-wave-header">
+          <span class="tl-wave-label">Wave {{ wave.number }}</span>
+          <span class="tl-wave-info">{{ wave.task_count }} task{{ 's' if wave.task_count != 1 else '' }}{% if wave.is_parallel %} ran in parallel{% endif %}</span>
+          {% if wave.duration > 0 %}
+          <span class="tl-wave-duration">{{ '{:.0f}'.format(wave.duration) }}s</span>
+          {% endif %}
+          {% if wave.total_cost > 0 %}
+          <span class="tl-wave-cost">${{ '{:.4f}'.format(wave.total_cost) }}</span>
+          {% endif %}
+        </div>
+
+        <div class="tl-wave-tasks{% if wave.is_parallel %} tl-parallel{% endif %}">
+          {% for task in wave.tasks %}
+          <div class="tl-task-card {% if not wave.is_parallel %}tl-task-expanded{% endif %}" id="task-card-{{ task.id }}">
+            <div class="tl-task-header" {% if wave.is_parallel %}onclick="toggleTimelineTask(this)" role="button" tabindex="0" aria-expanded="false" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleTimelineTask(this);}"{% endif %}>
+              <div class="tl-task-info">
+                {% if task.status == 'completed' %}
+                <span class="tl-task-status-icon tl-status-ok" title="Completed">&#10003;</span>
+                {% elif task.status == 'failed' %}
+                <span class="tl-task-status-icon tl-status-fail" title="Failed">&#10007;</span>
+                {% elif task.status == 'running' %}
+                <span class="tl-task-status-icon tl-status-run" title="Running">&#9654;</span>
+                {% elif task.status == 'awaiting_input' %}
+                <span class="tl-task-status-icon tl-status-wait" title="Awaiting Input">&#8987;</span>
+                {% elif task.status == 'cancelled' %}
+                <span class="tl-task-status-icon tl-status-cancel" title="Cancelled">&#8856;</span>
+                {% else %}
+                <span class="tl-task-status-icon tl-status-pending" title="Pending">&#9675;</span>
+                {% endif %}
+                <span class="tl-task-name">
+                  {{ task.expert or task.name or task.id }}
+                </span>
+                <a href="/tasks/{{ task.id }}" class="tl-task-id" title="Open task detail">{{ task.id }}</a>
+              </div>
+              <div class="tl-task-stats">
+                {% if task.duration_secs %}
+                <span class="tl-stat">{{ '{:.0f}'.format(task.duration_secs) }}s</span>
+                {% endif %}
+                {% set total_tokens = (task.input_tokens | default(0) or 0) + (task.output_tokens | default(0) or 0) %}
+                {% if total_tokens > 0 %}
+                <span class="tl-stat tl-stat-tokens">{{ '{:,}'.format(total_tokens) }} tok</span>
+                {% endif %}
+                {% if task.cost_usd and task.cost_usd > 0 %}
+                <span class="tl-stat tl-stat-cost">${{ '{:.4f}'.format(task.cost_usd) }}</span>
+                {% endif %}
+                {% if wave.is_parallel %}
+                <span class="tl-expand-icon">&#9654;</span>
+                {% endif %}
+              </div>
+            </div>
+
+            {% if wave.is_parallel %}
+            {# Collapsed preview: show result summary #}
+            <div class="tl-task-preview">
+              {% if task.result_summary %}
+              {{ task.result_summary[:200] }}{% if task.result_summary|length > 200 %}...{% endif %}
+              {% elif task.status == 'pending' %}
+              <span class="text-muted">Pending</span>
+              {% elif task.status == 'running' %}
+              <span class="text-muted">Running...</span>
+              {% else %}
+              <span class="text-muted">No summary available</span>
+              {% endif %}
+            </div>
+            {% endif %}
+
+            {# Task output body (lazy loaded) #}
+            <div class="tl-task-body" {% if wave.is_parallel %}style="display:none;"{% endif %}>
+              {% if task.status in ['completed', 'failed', 'running', 'awaiting_input'] %}
+              <div class="tl-task-output"
+                   id="tl-output-{{ task.id }}"
+                   {% if wave.is_parallel %}
+                   hx-get="/partials/task-output/{{ task.id }}"
+                   hx-trigger="revealed"
+                   hx-swap="innerHTML"
+                   {% endif %}>
+                {% if not wave.is_parallel %}
+                {# Sequential tasks: load output via htmx on reveal #}
+                <div hx-get="/partials/task-output/{{ task.id }}"
+                     hx-trigger="revealed"
+                     hx-swap="innerHTML">
+                  <span class="text-muted">Loading output...</span>
+                </div>
+                {% else %}
+                <span class="text-muted">Loading output...</span>
+                {% endif %}
+              </div>
+              {% elif task.status == 'pending' %}
+              <div class="tl-task-output">
+                <span class="text-muted">Task has not started yet.</span>
+              </div>
+              {% elif task.status == 'cancelled' %}
+              <div class="tl-task-output">
+                <span class="text-muted">Task was cancelled.</span>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+
+      {% if not phase.waves %}
+      <div class="tl-empty-phase">No tasks in this phase.</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    {% if not timeline_phases %}
+    <div class="tl-empty">
+      <p>No phases or tasks yet. Go back to the <a href="/projects/{{ project.name }}">project page</a> to get started.</p>
+    </div>
+    {% endif %}
+  </main>
+</div>
+
+<style>
+/* ===== Timeline Layout ===== */
+/* Override container padding so timeline fills full width */
+.container:has(.tl-layout) {
+  padding: 0;
+}
+.tl-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 0;
+  min-height: calc(100vh - 56px);
+  width: 100%;
+}
+
+/* ===== Sidebar ===== */
+.tl-sidebar {
+  border-right: 1px solid var(--border);
+  background: var(--bg-surface);
+  position: sticky;
+  top: 56px;
+  height: calc(100vh - 56px);
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+.tl-sidebar-inner {
+  padding: 1rem 0;
+}
+.tl-sidebar-header {
+  padding: 0 1rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+}
+.tl-nav-phase {
+  margin-bottom: 0.25rem;
+}
+.tl-nav-phase-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 1rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  transition: background var(--transition);
+  border-left: 3px solid transparent;
+}
+.tl-nav-phase-link:hover {
+  background: var(--accent-dim);
+  text-decoration: none;
+}
+.tl-nav-phase-link.tl-nav-active {
+  background: var(--accent-dim);
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+.tl-nav-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.tl-nav-status-complete { background: var(--success); }
+.tl-nav-status-in_progress { background: var(--accent); animation: pulse-dot 2s ease-in-out infinite; }
+.tl-nav-status-failed { background: var(--danger); }
+.tl-nav-status-not_started { background: var(--text-muted); opacity: 0.4; }
+.tl-nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-nav-waves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  padding: 0.2rem 1rem 0.2rem 2rem;
+}
+.tl-nav-wave-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-radius: 4px;
+  transition: all var(--transition);
+}
+.tl-nav-wave-link:hover {
+  background: var(--accent-dim);
+  color: var(--accent);
+  text-decoration: none;
+}
+.tl-nav-wave-link.tl-nav-active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.tl-nav-count {
+  background: var(--bg-elevated);
+  border-radius: 9999px;
+  padding: 0 0.35rem;
+  font-size: 0.62rem;
+  min-width: 1.1rem;
+  text-align: center;
+}
+
+/* ===== Main Content ===== */
+.tl-main {
+  padding: 1.5rem 2rem;
+  min-width: 0;
+}
+
+.tl-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.tl-title {
+  font-size: 1.3rem;
+  margin: 0;
+}
+.tl-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.tl-meta-cost {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.tl-meta-tasks {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* ===== Phase Headers ===== */
+.tl-phase {
+  margin-bottom: 2rem;
+  scroll-margin-top: 64px;
+}
+.tl-phase-header {
+  position: sticky;
+  top: 56px;
+  z-index: 10;
+  background: var(--bg);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  margin: 0 -1rem;
+  border-bottom: 2px solid var(--accent);
+  border-radius: 0;
+}
+.tl-phase-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.tl-phase-num {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+}
+.tl-phase-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.tl-phase-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.tl-phase-goal {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  padding: 0.5rem 0 0.75rem;
+  line-height: 1.5;
+}
+
+/* ===== Wave Headers ===== */
+.tl-wave {
+  margin-bottom: 1.25rem;
+  scroll-margin-top: 64px;
+}
+.tl-wave-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.tl-wave-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.tl-wave-info {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.tl-wave-duration {
+  font-size: 0.72rem;
+  font-family: var(--mono);
+  color: var(--text-muted);
+}
+.tl-wave-cost {
+  font-size: 0.72rem;
+  font-family: var(--mono);
+  color: var(--text-muted);
+}
+
+/* ===== Parallel indicator ===== */
+.tl-parallel {
+  border-left: 3px solid var(--accent-dim);
+  padding-left: 0.75rem;
+}
+
+/* ===== Task Cards ===== */
+.tl-task-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+  transition: border-color var(--transition);
+}
+.tl-task-card:hover {
+  border-color: var(--border-strong);
+}
+.tl-task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 1rem;
+  gap: 0.75rem;
+}
+.tl-parallel .tl-task-header {
+  cursor: pointer;
+}
+.tl-parallel .tl-task-header:hover {
+  background: var(--accent-dim);
+}
+.tl-task-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.tl-task-status-icon {
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+.tl-status-ok { color: var(--success); }
+.tl-status-fail { color: var(--danger); }
+.tl-status-run { color: var(--accent); animation: pulse-dot 2s ease-in-out infinite; }
+.tl-status-wait { color: var(--highlight); }
+.tl-status-cancel { color: var(--text-muted); }
+.tl-status-pending { color: var(--text-muted); opacity: 0.5; }
+.tl-task-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-task-id {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.tl-task-id:hover {
+  color: var(--accent);
+}
+.tl-task-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+.tl-stat {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+.tl-expand-icon {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+}
+.tl-task-expanded .tl-expand-icon {
+  transform: rotate(90deg);
+}
+
+/* ===== Task Preview (collapsed parallel tasks) ===== */
+.tl-task-preview {
+  padding: 0 1rem 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  max-height: 3em;
+  overflow: hidden;
+}
+.tl-task-expanded .tl-task-preview {
+  display: none;
+}
+
+/* ===== Task Body (expanded output) ===== */
+.tl-task-body {
+  border-top: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  max-height: 600px;
+  overflow-y: auto;
+}
+.tl-task-output {
+  font-size: 0.82rem;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+.tl-task-output pre,
+.tl-task-output code {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.tl-task-output .tool-widget-body {
+  overflow-x: auto;
+}
+
+/* ===== Empty states ===== */
+.tl-empty-phase {
+  padding: 1rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+.tl-empty {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .tl-layout {
+    grid-template-columns: 1fr;
+  }
+  .tl-sidebar {
+    position: static;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .tl-sidebar-inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    padding: 0.5rem;
+  }
+  .tl-sidebar-header {
+    width: 100%;
+    padding: 0.25rem 0.5rem;
+  }
+  .tl-nav-phase {
+    margin: 0;
+  }
+  .tl-nav-waves {
+    padding-left: 0.5rem;
+  }
+  .tl-main {
+    padding: 1rem;
+  }
+}
+</style>
+
+<script>
+// ===== Expand/Collapse parallel task cards =====
+function toggleTimelineTask(headerEl) {
+  var card = headerEl.closest('.tl-task-card');
+  if (!card) return;
+  var body = card.querySelector('.tl-task-body');
+  if (!body) return;
+
+  var isExpanded = card.classList.contains('tl-task-expanded');
+
+  if (isExpanded) {
+    card.classList.remove('tl-task-expanded');
+    body.style.display = 'none';
+    headerEl.setAttribute('aria-expanded', 'false');
+  } else {
+    card.classList.add('tl-task-expanded');
+    body.style.display = '';
+    headerEl.setAttribute('aria-expanded', 'true');
+    // Process htmx attributes on newly visible content
+    htmx.process(body);
+    // Manually trigger htmx load for elements with hx-trigger="revealed"
+    // since display:none->block toggle doesn't fire IntersectionObserver
+    var lazyEls = body.querySelectorAll('[hx-trigger="revealed"]');
+    lazyEls.forEach(function(el) {
+      if (!el.getAttribute('data-tl-loaded')) {
+        el.setAttribute('data-tl-loaded', '1');
+        // Clear guard on failure so user can retry by re-expanding
+        el.addEventListener('htmx:responseError', function() {
+          el.removeAttribute('data-tl-loaded');
+          el.innerHTML = '<span class="text-muted">Failed to load output. Collapse and expand to retry.</span>';
+        }, { once: true });
+        htmx.trigger(el, 'revealed');
+      }
+    });
+  }
+}
+
+// ===== Sidebar scroll tracking with IntersectionObserver =====
+(function() {
+  var phases = document.querySelectorAll('.tl-phase');
+  var waves = document.querySelectorAll('.tl-wave');
+
+  if (!phases.length) return;
+
+  // Track which sections are visible
+  var visiblePhases = new Set();
+  var visibleWaves = new Set();
+
+  function updateSidebarHighlight() {
+    // Clear all active states
+    document.querySelectorAll('.tl-nav-phase-link.tl-nav-active').forEach(function(el) {
+      el.classList.remove('tl-nav-active');
+    });
+    document.querySelectorAll('.tl-nav-wave-link.tl-nav-active').forEach(function(el) {
+      el.classList.remove('tl-nav-active');
+    });
+
+    // Highlight the first visible phase
+    var activePhase = null;
+    phases.forEach(function(phaseEl) {
+      if (visiblePhases.has(phaseEl.id)) {
+        if (!activePhase) activePhase = phaseEl.id;
+      }
+    });
+
+    if (activePhase) {
+      var pn = activePhase.replace('phase-', '');
+      var link = document.querySelector('.tl-nav-phase-link[data-phase="' + pn + '"]');
+      if (link) link.classList.add('tl-nav-active');
+    }
+
+    // Highlight the first visible wave
+    var activeWave = null;
+    waves.forEach(function(waveEl) {
+      if (visibleWaves.has(waveEl.id)) {
+        if (!activeWave) activeWave = waveEl.id;
+      }
+    });
+
+    if (activeWave) {
+      // Parse "phase-N-wave-M"
+      var parts = activeWave.match(/phase-(\d+)-wave-(\d+)/);
+      if (parts) {
+        var wLink = document.querySelector('.tl-nav-wave-link[data-phase="' + parts[1] + '"][data-wave="' + parts[2] + '"]');
+        if (wLink) wLink.classList.add('tl-nav-active');
+      }
+    }
+  }
+
+  // Phase observer
+  var phaseObserver = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        visiblePhases.add(entry.target.id);
+      } else {
+        visiblePhases.delete(entry.target.id);
+      }
+    });
+    updateSidebarHighlight();
+  }, {
+    rootMargin: '-80px 0px -60% 0px',
+    threshold: 0
+  });
+
+  // Wave observer
+  var waveObserver = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        visibleWaves.add(entry.target.id);
+      } else {
+        visibleWaves.delete(entry.target.id);
+      }
+    });
+    updateSidebarHighlight();
+  }, {
+    rootMargin: '-80px 0px -60% 0px',
+    threshold: 0
+  });
+
+  phases.forEach(function(el) { phaseObserver.observe(el); });
+  waves.forEach(function(el) { waveObserver.observe(el); });
+
+  // Smooth scroll for sidebar links
+  document.querySelectorAll('.tl-nav-phase-link, .tl-nav-wave-link').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      var targetId = this.getAttribute('href').substring(1);
+      var target = document.getElementById(targetId);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+})();
+
+// Note: renderMarkdown is already registered as htmx:afterSwap listener in base.html
+</script>
+{% endblock %}

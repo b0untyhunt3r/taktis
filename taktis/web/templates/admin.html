@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Admin — Taktis{% endblock %}
+
+{% block content %}
+<style>
+.diag-card-elevated {
+  border-left: 3px solid var(--highlight);
+}
+.diag-card-elevated .card-value {
+  color: var(--highlight);
+}
+.diag-card-warn {
+  border-left: 3px solid #f59e0b;
+}
+.diag-card-warn .card-value {
+  color: #f59e0b;
+}
+.diag-refreshed {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-left: 0.75rem;
+  font-weight: normal;
+}
+</style>
+
+<nav class="breadcrumb">
+  <a href="/">Dashboard</a> <span class="sep">/</span>
+  <span class="current">Admin</span>
+</nav>
+<h1>Admin / Settings</h1>
+
+<!-- Diagnostics Cards -->
+<h2>System Diagnostics <span class="diag-refreshed" id="diag-refreshed"></span></h2>
+<div class="cards" style="margin-bottom:1.5rem;">
+  <div class="card accent{% if diagnostics.running_tasks|default(0)|int > 0 %} diag-card-elevated{% endif %}">
+    <span class="card-value">{{ diagnostics.running_tasks }}</span>
+    <span class="card-label">Running Tasks</span>
+  </div>
+  <div class="card{% if diagnostics.active_pipelines|default(0)|int > 0 %} diag-card-elevated{% endif %}">
+    <span class="card-value">{{ diagnostics.active_pipelines }}</span>
+    <span class="card-label">Active Pipelines</span>
+  </div>
+  <div class="card{% if diagnostics.event_subscribers|default(0)|int > 10 %} diag-card-warn{% endif %}">
+    <span class="card-value">{{ diagnostics.event_subscribers }}</span>
+    <span class="card-label">Event Subscribers</span>
+  </div>
+  <div class="card{% if diagnostics.db_size_mb|default(0)|float > 50 %} diag-card-warn{% endif %}">
+    <span class="card-value">{{ diagnostics.db_size_mb }} MB</span>
+    <span class="card-label">Database Size</span>
+  </div>
+</div>
+
+<!-- Configuration Table -->
+<div class="panel">
+  <div class="panel-header">
+    <h2>Configuration</h2>
+    <span class="text-muted" style="font-size:0.8rem;">Read-only — edit config.yaml or set ORCH_* env vars to change</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Setting</th>
+        <th>Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for key, value in config.items() %}
+      <tr>
+        <td style="font-family:var(--mono); font-size:0.85rem;">{{ key }}</td>
+        <td style="font-family:var(--mono); font-size:0.85rem;">{{ value }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Environment Info -->
+<div class="panel">
+  <div class="panel-header">
+    <h2>Environment</h2>
+  </div>
+  <dl class="info-grid">
+    <dt>Python</dt>
+    <dd style="font-family:var(--mono); font-size:0.85rem;">{{ diagnostics.python_version }}</dd>
+    <dt>Platform</dt>
+    <dd style="font-family:var(--mono); font-size:0.85rem;">{{ diagnostics.platform }}</dd>
+  </dl>
+</div>
+
+<script>
+(function() {
+  var el = document.getElementById('diag-refreshed');
+  if (el) {
+    var now = new Date();
+    var h = now.getHours();
+    var m = now.getMinutes();
+    var s = now.getSeconds();
+    el.textContent = 'Last refreshed: ' +
+      (h < 10 ? '0' : '') + h + ':' +
+      (m < 10 ? '0' : '') + m + ':' +
+      (s < 10 ? '0' : '') + s;
+  }
+})();
+</script>
+{% endblock %}

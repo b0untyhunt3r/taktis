@@ -1,0 +1,720 @@
+{% extends "base.html" %}
+{% block title %}Task {{ task.id[:12] }} — Taktis{% endblock %}
+
+{% block content %}
+<style>
+.context-bar {
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 0.4rem;
+}
+.context-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.context-bar-fill.safe { background: #10b981; }
+.context-bar-fill.warn { background: #f59e0b; }
+.context-bar-fill.danger { background: #ef4444; }
+.reply-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.stale-warning {
+  background: rgba(220, 53, 69, 0.15);
+  border: 1px solid var(--danger, #dc3545);
+  border-radius: var(--radius, 6px);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.stale-warning__text { flex: 1; color: var(--danger, #dc3545); }
+.idle-indicator { color: var(--text-muted, #888); font-size: 0.85rem; }
+.idle-indicator.idle-warning { color: var(--warning, #ffc107); }
+.idle-indicator.idle-danger { color: var(--danger, #dc3545); }
+</style>
+<nav class="breadcrumb">
+  <a href="/">Dashboard</a> <span class="sep">/</span>
+  <a href="/projects">Projects</a> <span class="sep">/</span>
+  {% if project_name %}
+  <a href="/projects/{{ project_name }}">{{ project_name }}</a> <span class="sep">/</span>
+  {% endif %}
+  <span class="current">Task {{ task.id[:8] }}</span>
+</nav>
+<h1>Task <code>{{ task.id[:12] }}</code></h1>
+
+<!-- Task Info -->
+<div class="panel">
+  <h2>Task Info</h2>
+  <dl class="info-grid">
+    <dt>Full ID</dt>
+    <dd><code>{{ task.id }}</code></dd>
+    <dt>Name</dt>
+    <dd>{{ task.name | default('—') }}</dd>
+    <dt>Status</dt>
+    <dd>
+      <span class="badge badge-{{ task.status }}">{{ task.status }}</span>
+      {% if task.status == 'running' and last_activity %}
+      <span id="idle-indicator" data-last-activity="{{ last_activity }}" class="idle-indicator">
+        <span class="idle-time"></span>
+      </span>
+      {% endif %}
+    </dd>
+    <dt>Wave</dt>
+    <dd>{{ task.wave | default('—') }}</dd>
+    <dt>Model</dt>
+    <dd>{{ task.model | default('—') }}</dd>
+    <dt>Expert</dt>
+    <dd>{{ task.expert or '—' }}</dd>
+    <dt>Cost</dt>
+    <dd>{{ '${:.4f}'.format(task.cost_usd) if task.cost_usd else '—' }}</dd>
+    <dt>Context</dt>
+    <dd>{% set peak = (task.peak_input_tokens or 0) %}{% set inp = (task.input_tokens or 0) %}{% set out = (task.output_tokens or 0) %}{% set turns = (task.num_turns or 0) %}{% set ctx_window = context_window|default(200000) %}{% if peak > 0 %}{% set pct = ((peak / ctx_window) * 100)|round(1) %}{{ '{:,}'.format(ctx_window // 1000) }}K window / {{ '{:,}'.format(peak) }} peak ({{ pct }}%) / {{ '{:,}'.format(inp) }}in + {{ '{:,}'.format(out) }}out total{% if turns > 0 %} / {{ turns }} turns{% endif %}
+      <div class="context-bar">
+        <div class="context-bar-fill {{ 'danger' if pct > 90 else 'warn' if pct > 70 else 'safe' }}" style="width: {{ pct }}%"></div>
+      </div>{% elif inp > 0 %}{{ '{:,}'.format(ctx_window // 1000) }}K window / {{ '{:,}'.format(inp) }}in + {{ '{:,}'.format(out) }}out total{% if turns > 0 %} / {{ turns }} turns{% endif %}{% else %}—{% endif %}</dd>
+    <dt>Created</dt>
+    <dd>{{ task.created_at | dt }}</dd>
+    <dt>Started</dt>
+    <dd>{{ task.started_at | dt }}</dd>
+    <dt>Completed</dt>
+    <dd>{{ task.completed_at | dt }}</dd>
+    <dt>Prompt</dt>
+    <dd style="white-space:pre-wrap;">{{ task.prompt | default('—') }}</dd>
+  </dl>
+</div>
+
+<!-- Context Inspector -->
+{% if context_manifest %}
+<div class="panel" style="margin-bottom: 1rem;">
+  <h2 style="cursor: pointer; user-select: none;" onclick="this.nextElementSibling.classList.toggle('hidden')">
+    Context Injected
+    <span style="font-size: 0.8em; font-weight: normal; color: var(--text-muted);">
+      ({{ context_manifest|length }} sections, {{ '{:,}'.format(context_manifest|map(attribute='chars_used')|sum|int) }} chars)
+    </span>
+    <span style="float: right; font-size: 0.8em;">&#9660;</span>
+  </h2>
+  <div class="hidden" style="display:none;">
+    <table class="table" style="font-size: 0.85em;">
+      <thead>
+        <tr>
+          <th>Section</th>
+          <th>Priority</th>
+          <th style="text-align: right;">Size</th>
+          <th>Mode</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sec in context_manifest %}
+        <tr>
+          <td><code style="font-size: 0.85em;">{{ sec.tag }}</code></td>
+          <td>P{{ sec.priority }}</td>
+          <td style="text-align: right;">
+            {{ '{:,}'.format(sec.chars_used) }}
+            {% if sec.chars_used != sec.chars_full %}
+              <span style="color: var(--text-muted);"> / {{ '{:,}'.format(sec.chars_full) }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if sec.mode == 'full' %}
+              <span class="badge" style="background: #10b981; color: white;">full</span>
+            {% elif sec.mode == 'summary' %}
+              <span class="badge" style="background: #f59e0b; color: black;">summary</span>
+            {% elif sec.mode == 'truncated' %}
+              <span class="badge" style="background: #ef4444; color: white;">truncated</span>
+            {% elif sec.mode == 'omitted' %}
+              <span class="badge" style="background: #6b7280; color: white;">omitted</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Discuss / Research buttons for pending tasks -->
+{% if task.status == 'pending' and task.task_type not in ['planner', 'discuss_task', 'task_researcher', 'phase_review', 'phase_review_fix'] %}
+<div class="panel" style="display:flex; gap:0.5rem; align-items:center;">
+  <span style="color:var(--text-muted); font-size:0.85rem;">Prep (optional):</span>
+  <button class="btn-sm"
+          hx-post="/api/tasks/{{ task.id }}/discuss"
+          hx-swap="none"
+          title="Discuss implementation decisions for this task"
+          style="font-size:0.75rem;">Discuss{% if has_discuss %} &#10003;{% endif %}</button>
+  <button class="btn-sm"
+          hx-post="/api/tasks/{{ task.id }}/research"
+          hx-swap="none"
+          title="Research domain-specific concerns for this task"
+          style="font-size:0.75rem;">Research{% if has_research %} &#10003;{% endif %}</button>
+</div>
+{% endif %}
+
+<!-- Failed Result -->
+{% if task.status == 'failed' and task.result_summary %}
+<div class="panel" style="border-left: 3px solid var(--danger);">
+  <h2>Failure Details</h2>
+  <div class="output-log" style="max-height:200px; color:var(--danger);">{{ task.result_summary }}</div>
+</div>
+{% endif %}
+
+<!-- Pending permission: tool approval OR user question — shown for ANY task type -->
+{% if pending_approval %}
+  {% if pending_approval.tool_name == 'AskUserQuestion' %}
+  {# Claude is asking the user a question via AskUserQuestion tool #}
+  <div class="panel" style="border-left: 3px solid var(--highlight);">
+    <h2>Claude Has a Question</h2>
+    {% if pending_approval.input and pending_approval.input.questions is defined %}
+      <form id="ask-user-form" autocomplete="off">
+      {% for q in pending_approval.input.questions %}
+      {% set q_idx = loop.index0 %}
+      <div style="margin-bottom:1rem;">
+        <p style="margin:0 0 0.5rem 0;"><strong>{{ q.question }}</strong></p>
+        {% if q.options is defined %}
+        <div style="display:flex; flex-direction:column; gap:0.4rem; margin-left:1rem;">
+          {% for opt in q.options %}
+          <label style="display:flex; align-items:flex-start; gap:0.5rem; cursor:pointer;">
+            <input type="radio" name="q_{{ q_idx }}" value="{{ opt.label }}" style="width:auto; margin-top:0.3rem;">
+            <span><strong>{{ opt.label }}</strong>{% if opt.description is defined %} — <span class="text-muted">{{ opt.description }}</span>{% endif %}</span>
+          </label>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+      </form>
+    {% endif %}
+    <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-top:0.75rem;">
+      <button class="btn-success" id="btn-submit-answers"
+              onclick="submitAskUserAnswers('{{ task.id }}')">
+        Submit Answer
+      </button>
+      <form hx-post="/api/tasks/{{ task.id }}/deny"
+            hx-swap="none"
+            hx-on::after-request="location.reload()"
+            style="display:flex; gap:0.5rem;">
+        <input type="text" name="message" placeholder="Custom answer..." style="width:250px;">
+        <button type="submit">Send Custom</button>
+      </form>
+    </div>
+    <script>
+    function submitAskUserAnswers(taskId) {
+      var form = document.getElementById('ask-user-form');
+      if (!form) return;
+      var answers = [];
+      var radios = form.querySelectorAll('input[type="radio"]:checked');
+      radios.forEach(function(r) { answers.push(r.value); });
+      var answerText = answers.length > 0 ? answers.join(', ') : '';
+      var csrfToken = document.cookie.split(';').map(function(c){return c.trim();}).find(function(c){return c.startsWith('csrf_token=');});
+      csrfToken = csrfToken ? csrfToken.split('=')[1] : '';
+      fetch('/api/tasks/' + taskId + '/approve-answers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'HX-Request': 'true',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({ answers: answers })
+      }).then(function() { location.reload(); });
+    }
+    </script>
+  </div>
+  {% else %}
+  {# Tool approval needed (Bash, Write, Edit, etc.) #}
+  <div class="panel" style="border-left: 3px solid var(--highlight);">
+    <h2>Tool Approval Required</h2>
+    <div style="margin-bottom: 1rem;">
+      <p style="margin:0 0 0.5rem 0;"><strong>Tool:</strong> <code>{{ pending_approval.tool_name }}</code></p>
+      {% if pending_approval.input %}
+        {% if pending_approval.input.command is defined %}
+        <p style="margin:0 0 0.5rem 0;"><strong>Command:</strong></p>
+        <pre style="background:var(--bg);padding:0.75rem;border-radius:6px;overflow-x:auto;margin:0 0 0.5rem 0;"><code>{{ pending_approval.input.command }}</code></pre>
+        {% elif pending_approval.input.file_path is defined %}
+        <p style="margin:0 0 0.5rem 0;"><strong>File:</strong> <code>{{ pending_approval.input.file_path }}</code></p>
+        {% endif %}
+        {% if pending_approval.input.description is defined %}
+        <p style="margin:0 0 0.5rem 0;" class="text-muted">{{ pending_approval.input.description }}</p>
+        {% endif %}
+      {% endif %}
+    </div>
+    <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+      <button class="btn-success"
+              hx-post="/api/tasks/{{ task.id }}/approve"
+              hx-swap="none"
+              hx-on::after-request="location.reload()">
+        Approve Tool
+      </button>
+      <form hx-post="/api/tasks/{{ task.id }}/deny"
+            hx-swap="none"
+            hx-on::after-request="location.reload()"
+            style="display:flex; gap:0.5rem;">
+        <input type="text" name="message" placeholder="Reason (optional)" style="width:200px;">
+        <button type="submit" class="btn-danger">Deny</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+{% elif task.status == 'awaiting_input' and not task.interactive %}
+<!-- Non-interactive awaiting input (no tool approval, no reply box) -->
+<div class="panel" style="border-left: 3px solid var(--highlight);">
+  <h2>Awaiting Input</h2>
+  <p class="text-muted mb-1">This task is waiting for input before continuing.</p>
+  <form id="reply-form-input" hx-post="/api/tasks/{{ task.id }}/input"
+        hx-swap="none"
+        hx-on::after-request="location.reload()"
+        style="display:flex; gap:0.5rem; min-width:250px;">
+    <input type="text" name="text" placeholder="Send a message..." style="flex:1;">
+    <button type="submit">Send</button>
+  </form>
+  <script>
+  (function() {
+    var form = document.getElementById('reply-form-input');
+    if (form) {
+      form.addEventListener('submit', function() {
+        var input = this.querySelector('input[name="text"]');
+        if (input) echoUserMessage(input.value);
+      });
+    }
+  })();
+  </script>
+</div>
+{% endif %}
+
+<!-- Stale task warning -->
+{% if task.status == 'running' %}
+<div id="stale-warning" class="stale-warning" style="display:none;">
+  <span class="stale-warning__text">This task has been idle for <span class="stale-warning__time"></span> with no output. It may be stalled.</span>
+  <button class="btn btn-sm btn-danger" onclick="killStaleTask()">Kill Stale Task</button>
+</div>
+{% endif %}
+
+<!-- Task Actions -->
+<div style="display:flex; gap:0.75rem; margin-bottom:1.5rem;">
+  {% if task.status in ['pending', 'failed', 'completed'] %}
+  <button class="btn-success"
+          hx-post="/api/tasks/{{ task.id }}/start"
+          hx-swap="none"
+          hx-on::after-request="location.reload()"
+          {% if task.status == 'completed' %}hx-confirm="Re-run this completed task? Previous output will be cleared."{% endif %}>
+    {% if task.status == 'failed' %}Retry Task{% elif task.status == 'completed' %}Re-run Task{% else %}Start Task{% endif %}
+  </button>
+  {% endif %}
+  {% if task.status == 'running' %}
+  <button class="btn-danger"
+          hx-post="/api/tasks/{{ task.id }}/stop"
+          hx-swap="none"
+          hx-on::after-request="location.reload()">
+    Stop Task
+  </button>
+  {% endif %}
+</div>
+
+<!-- Output Log -->
+<div class="panel">
+  <div class="panel-header">
+    <h2>Output</h2>
+    {% if task.status == 'running' %}
+    <span style="font-size:0.8rem; color:var(--accent);">Live</span>
+    {% endif %}
+  </div>
+
+  <div class="output-log" id="task-output">
+    {# Load existing output from DB (accumulated blocks for running tasks) #}
+    <div id="task-output-history"
+         hx-get="/partials/task-output/{{ task.id }}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <span class="text-muted">Loading output&hellip;</span>
+    </div>
+    {% if task.status == 'running' %}
+    {# Streaming indicator -- removed when history has content or by SSE #}
+    <div id="working-indicator" class="streaming-bar" style="display:none;">
+      <div class="streaming-bar-inner">
+        <div class="streaming-pulse"></div>
+        <span>Claude is working...</span>
+      </div>
+    </div>
+    {# SSE live output -- connected via JS after history loads (no htmx sse extension) #}
+    <div id="task-output-live"></div>
+    {% endif %}
+    {# Improvement 3: Smart auto-scroll "New content" button #}
+    <button class="scroll-to-bottom" id="scroll-to-bottom-btn">New content below</button>
+    {# Improvement 5: Execution Progress Pill #}
+    {% if task.status == 'running' %}
+    <div class="progress-pill" id="progress-pill" style="display:none;">
+      <div class="pill-spinner"></div>
+      <span class="pill-label">Working...</span>
+      <span class="pill-timer" id="pill-timer">0:00</span>
+      <button class="pill-stop"
+              hx-post="/api/tasks/{{ task.id }}/stop"
+              hx-swap="none"
+              hx-on::after-request="location.reload()">Stop</button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- User echo + streaming buffer scripts -->
+<script>
+function echoUserMessage(text) {
+  var output = document.getElementById('task-output') || document.getElementById('task-output-live');
+  if (!output || !text.trim()) return;
+  // Add turn separator before user message
+  var sep = document.createElement('div');
+  sep.className = 'turn-separator';
+  sep.innerHTML = '<span class="turn-label">---</span>';
+  output.appendChild(sep);
+  var card = document.createElement('div');
+  card.className = 'msg-card msg-user';
+  card.innerHTML = '<div class="msg-icon">U</div><div class="msg-content">' +
+    DOMPurify.sanitize(marked.parse(text)) + '</div>';
+  output.appendChild(card);
+  if (window.__autoScrollEnabled) output.scrollTop = output.scrollHeight;
+}
+
+var _streamBuf = "";
+var _streamEl = null;
+var _streamTimer = null;
+
+window.__chatAppend = function(text) {
+  _streamBuf += text;
+  if (!_streamEl) _streamEl = document.getElementById('current-text-block');
+  if (!_streamTimer) {
+    _streamTimer = setTimeout(function() {
+      _streamTimer = null;
+      if (_streamEl && _streamBuf) {
+        var safe = _streamBuf;
+        // Close unclosed code fences for rendering
+        if ((safe.match(/```/g) || []).length % 2 !== 0) safe += '\n```';
+        _streamEl.innerHTML = DOMPurify.sanitize(marked.parse(safe));
+        // Highlight code blocks
+        _streamEl.querySelectorAll('pre code').forEach(function(b) { hljs.highlightElement(b); });
+      }
+    }, 250);
+  }
+};
+
+window.__chatReset = function() {
+  if (_streamTimer) clearTimeout(_streamTimer);
+  _streamTimer = null;
+  // Try to find element if not cached
+  if (!_streamEl) _streamEl = document.getElementById('current-text-block');
+  // Final render
+  if (_streamEl && _streamBuf) {
+    _streamEl.innerHTML = DOMPurify.sanitize(marked.parse(_streamBuf));
+    _streamEl.querySelectorAll('pre code').forEach(function(b) { hljs.highlightElement(b); });
+  }
+  _streamBuf = "";
+  _streamEl = null;
+};
+
+/* === Improvement 3: Smart Auto-Scroll === */
+(function() {
+  var log = document.getElementById('task-output');
+  var scrollBtn = document.getElementById('scroll-to-bottom-btn');
+  var threshold = 60;
+  window.__autoScrollEnabled = true;
+
+  if (log) {
+    log.addEventListener('scroll', function() {
+      var atBottom = (log.scrollTop + log.clientHeight >= log.scrollHeight - threshold);
+      if (atBottom) {
+        window.__autoScrollEnabled = true;
+        if (scrollBtn) scrollBtn.classList.remove('visible');
+      } else {
+        window.__autoScrollEnabled = false;
+        if (scrollBtn) scrollBtn.classList.add('visible');
+      }
+    });
+  }
+  if (scrollBtn) {
+    scrollBtn.addEventListener('click', function() {
+      if (log) {
+        log.scrollTop = log.scrollHeight;
+        window.__autoScrollEnabled = true;
+        scrollBtn.classList.remove('visible');
+      }
+    });
+  }
+})();
+
+/* === Improvement 5: Execution Progress Pill === */
+(function() {
+  var pill = document.getElementById('progress-pill');
+  var timerEl = document.getElementById('pill-timer');
+  var startTime = null;
+  var timerInterval = null;
+
+  function formatElapsed(ms) {
+    var s = Math.floor(ms / 1000);
+    var m = Math.floor(s / 60);
+    s = s % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  window.__progressStart = function() {
+    if (!pill) return;
+    startTime = Date.now();
+    pill.style.display = 'inline-flex';
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(function() {
+      if (timerEl && startTime) {
+        timerEl.textContent = formatElapsed(Date.now() - startTime);
+      }
+    }, 1000);
+  };
+
+  window.__progressStop = function() {
+    if (!pill) return;
+    pill.style.display = 'none';
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    startTime = null;
+    if (timerEl) timerEl.textContent = '0:00';
+  };
+})();
+</script>
+
+<!-- Chat reply form — shown below output for interactive awaiting_input (only when no tool approval pending) -->
+{% if task.status == 'awaiting_input' and task.interactive and not pending_approval %}
+<div class="panel" style="border-left: 3px solid var(--accent);">
+  <h2>Reply to Claude</h2>
+  <form id="reply-form-continue" hx-post="/api/tasks/{{ task.id }}/continue"
+        hx-swap="none"
+        hx-on::after-request="this.reset(); location.reload()">
+    <div class="form-group">
+      <textarea name="text" required placeholder="Type your reply..." rows="5"
+                class="reply-textarea"
+                style="width:100%; resize:vertical;" autocomplete="off" autofocus></textarea>
+    </div>
+    <button type="submit" class="btn-success">Send</button>
+  </form>
+  <script>
+  (function() {
+    var form = document.getElementById('reply-form-continue');
+    if (form) {
+      form.addEventListener('submit', function() {
+        var textarea = this.querySelector('textarea[name="text"]');
+        if (textarea) echoUserMessage(textarea.value);
+      });
+    }
+  })();
+  </script>
+</div>
+{% elif task.status in ['completed', 'failed'] %}
+{% if pending_plan_approval and task.status == 'completed' %}
+<div style="padding:1.25rem 1.5rem;margin-bottom:1rem;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.35);border-left:4px solid var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;">
+  <div style="flex:1;min-width:200px;">
+    <strong style="font-size:1.1rem;color:var(--text-primary);">Pipeline plan is ready for review</strong>
+    <p style="margin:0.35rem 0 0;color:var(--text-muted);font-size:0.9rem;">This task produced the plan. Review it above, then apply to start execution.</p>
+  </div>
+  <button class="btn btn-primary"
+          style="font-size:1rem;padding:0.6rem 1.5rem;white-space:nowrap;"
+          hx-post="/api/pipelines/{{ project_id_for_plan }}/approve-plan"
+          hx-swap="none"
+          hx-on::after-request="window.location.href='/projects/{{ project_name }}';">
+    Apply Plan &amp; Start Execution
+  </button>
+</div>
+{% endif %}
+<div class="panel" style="border-left: 3px solid var(--accent);">
+  <h2>Continue Conversation</h2>
+  <form id="reply-form-completed" hx-post="/api/tasks/{{ task.id }}/continue"
+        hx-swap="none"
+        hx-on::after-request="this.reset(); location.reload()">
+    <div class="form-group">
+      <textarea name="text" required placeholder="Reply to Claude..." rows="5"
+                class="reply-textarea"
+                style="width:100%; resize:vertical;" autocomplete="off"></textarea>
+    </div>
+    <button type="submit" class="btn-success">Send</button>
+  </form>
+  <script>
+  (function() {
+    var form = document.getElementById('reply-form-completed');
+    if (form) {
+      form.addEventListener('submit', function() {
+        var textarea = this.querySelector('textarea[name="text"]');
+        if (textarea) echoUserMessage(textarea.value);
+      });
+    }
+  })();
+  </script>
+</div>
+{% endif %}
+
+{% if task.status == 'running' %}
+<script>
+(function() {
+  var liveDiv = document.getElementById('task-output-live');
+  var log = document.getElementById('task-output');
+  var es = null;
+
+  function connectSSE() {
+    if (es) return;
+    // Show streaming indicator while waiting for first content
+    var wi = document.getElementById('working-indicator');
+    if (wi) wi.style.display = 'block';
+    // Start progress pill on SSE connect (task is running)
+    if (typeof window.__progressStart === 'function') window.__progressStart();
+
+    es = new EventSource('/events/task/{{ task.id }}');
+    es.onmessage = function(e) {
+      var html = e.data;
+      // Reset idle timer on any SSE message
+      if (typeof window.__resetIdleTimer === 'function') window.__resetIdleTimer();
+      // Extract and execute inline scripts (typing indicator, thinking appends, progress)
+      var scriptRe = /<script>([\s\S]*?)<\/script>/g;
+      var m;
+      while ((m = scriptRe.exec(html)) !== null) {
+        try { (new Function(m[1]))(); } catch(ex) { console.warn('SSE script error:', ex); }
+      }
+      var clean = html.replace(/<script>[\s\S]*?<\/script>/g, '');
+      if (clean.trim()) {
+        liveDiv.insertAdjacentHTML('beforeend', clean);
+      }
+      // Smart auto-scroll: only scroll if user is near bottom (Improvement 3)
+      if (log && window.__autoScrollEnabled) log.scrollTop = log.scrollHeight;
+    };
+    es.addEventListener('done', function() {
+      if (wi) wi.style.display = 'none';
+      if (typeof window.__chatReset === 'function') window.__chatReset();
+      if (typeof window.__progressStop === 'function') window.__progressStop();
+      // Reset auto-scroll state
+      window.__autoScrollEnabled = true;
+      var scrollBtn = document.getElementById('scroll-to-bottom-btn');
+      if (scrollBtn) scrollBtn.classList.remove('visible');
+      es.close();
+      location.reload();
+    });
+    es.addEventListener('started', function() { es.close(); location.reload(); });
+    window.addEventListener('beforeunload', function() { if (es) es.close(); });
+  }
+
+  // Connect SSE only AFTER history finishes loading (prevents duplication)
+  document.addEventListener('htmx:afterSwap', function(evt) {
+    if (evt.detail.target && evt.detail.target.id === 'task-output-history') {
+      connectSSE();
+    }
+  });
+
+  // Smart auto-scroll: MutationObserver respects auto-scroll state (Improvement 3)
+  if (log) {
+    var observer = new MutationObserver(function() {
+      if (window.__autoScrollEnabled) log.scrollTop = log.scrollHeight;
+    });
+    observer.observe(log, { childList: true, subtree: true, characterData: true });
+  }
+})();
+</script>
+<script>
+/* === Idle Monitor: tracks time since last output event === */
+(function() {
+  var STALE_THRESHOLD = 300; // 5 minutes in seconds
+  var WARNING_THRESHOLD = 120; // 2 minutes — show yellow warning
+  var indicator = document.getElementById('idle-indicator');
+  var idleTimeSpan = indicator ? indicator.querySelector('.idle-time') : null;
+  var staleWarning = document.getElementById('stale-warning');
+  var staleTimeSpan = staleWarning ? staleWarning.querySelector('.stale-warning__time') : null;
+
+  // Initialize from server-provided last activity timestamp
+  var lastActivityAttr = indicator ? indicator.getAttribute('data-last-activity') : null;
+  var lastActivity = lastActivityAttr ? new Date(lastActivityAttr + (lastActivityAttr.indexOf('Z') === -1 && lastActivityAttr.indexOf('+') === -1 ? 'Z' : '')).getTime() : Date.now();
+
+  // Global reset function called by SSE onmessage
+  window.__resetIdleTimer = function() {
+    lastActivity = Date.now();
+    // Hide stale warning immediately on new activity
+    if (staleWarning) staleWarning.style.display = 'none';
+    // Reset indicator classes
+    if (indicator) {
+      indicator.classList.remove('idle-warning', 'idle-danger');
+    }
+  };
+
+  function formatDuration(seconds) {
+    if (seconds < 60) return seconds + 's ago';
+    var m = Math.floor(seconds / 60);
+    var s = seconds % 60;
+    if (m < 60) return m + 'm ' + s + 's ago';
+    var h = Math.floor(m / 60);
+    m = m % 60;
+    return h + 'h ' + m + 'm ago';
+  }
+
+  function getCsrf() {
+    var m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+    return m ? m[1] : '';
+  }
+
+  window.killStaleTask = function() {
+    fetch('/api/tasks/{{ task.id }}/stop', {
+      method: 'POST',
+      headers: {
+        'HX-Request': 'true',
+        'X-CSRFToken': getCsrf()
+      }
+    }).then(function() { location.reload(); });
+  };
+
+  function updateIdle() {
+    var now = Date.now();
+    var idleSec = Math.floor((now - lastActivity) / 1000);
+
+    // Update idle indicator text
+    if (idleTimeSpan) {
+      idleTimeSpan.textContent = ' — Last activity: ' + formatDuration(idleSec);
+    }
+
+    // Color coding
+    if (indicator) {
+      indicator.classList.remove('idle-warning', 'idle-danger');
+      if (idleSec >= STALE_THRESHOLD) {
+        indicator.classList.add('idle-danger');
+      } else if (idleSec >= WARNING_THRESHOLD) {
+        indicator.classList.add('idle-warning');
+      }
+    }
+
+    // Show/hide stale warning banner
+    if (staleWarning) {
+      if (idleSec >= STALE_THRESHOLD) {
+        staleWarning.style.display = 'flex';
+        if (staleTimeSpan) staleTimeSpan.textContent = formatDuration(idleSec);
+      } else {
+        staleWarning.style.display = 'none';
+      }
+    }
+  }
+
+  // Run immediately, then every 10 seconds
+  updateIdle();
+  setInterval(updateIdle, 10000);
+})();
+</script>
+{% elif task.status in ['pending', 'awaiting_input'] %}
+<script>
+(function() {
+  // Status-only SSE — reload on start/finish/checkpoint
+  var taskEs = new EventSource('/events/task/{{ task.id }}');
+  taskEs.addEventListener('done', function() { taskEs.close(); location.reload(); });
+  taskEs.addEventListener('started', function() { taskEs.close(); location.reload(); });
+  window.addEventListener('beforeunload', function() { taskEs.close(); });
+})();
+</script>
+{% endif %}
+
+{% with advisor_title="Task Advisor", advisor_subtitle="Get debugging help and discuss implementation approaches.", advisor_placeholder="Ask about this task..." %}
+{% include "partials/advisor_widget.html" %}
+{% endwith %}
+
+<script>
+initAdvisor('task', '{{ task.id }}');
+</script>
+{% endblock %}

@@ -1,0 +1,659 @@
+{
+  "name": "Pipeline Factory",
+  "description": "Meta-pipeline that interviews a user about their goals, classifies the domain, conducts a domain-specific deep-dive, designs a pipeline architecture, and generates a ready-to-use Drawflow pipeline template.",
+  "flow_json": {
+    "drawflow": {
+      "Discovery": {
+        "data": {
+          "1": {
+            "id": 1,
+            "name": "phase_settings",
+            "data": {
+              "type_id": "phase_settings",
+              "name": "Phase Settings",
+              "phase_name": "Discovery",
+              "phase_goal": "Understand what the user wants to build as a pipeline — goals, inputs, outputs, domain, and complexity",
+              "success_criteria": "Structured requirements summary produced\nDomain identified and domain-specific context gathered\nDISCOVERY.md written to context",
+              "context_files": ""
+            },
+            "class": "phase_settings",
+            "html": "",
+            "typenode": false,
+            "inputs": {},
+            "outputs": {},
+            "pos_x": 50,
+            "pos_y": 50
+          },
+          "2": {
+            "id": 2,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Interview",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "question-asker",
+              "prompt": "You are a DISCOVERY AGENT gathering requirements — NOT an implementer. Do NOT use Bash, Write, Edit, or any file-modifying tools. Do NOT create files, run commands, or build anything. Your ONLY job is to ask clarifying questions and produce a text summary.\n\nYou are conducting a discovery interview to understand what pipeline the user wants to build.\n\nSTEP 1 — ANALYZE THE DESCRIPTION FIRST:\nThe project description is in your context. Read it carefully and extract everything you can already infer:\n- What is the goal?\n- What are the inputs (data sources, APIs, files, commands)?\n- What are the expected outputs?\n- Is there mention of external services, URLs, APIs, or tools?\n- Is the complexity simple (2-3 steps) or complex (many parallel tracks)?\n- What domain does this fall into?\n\nSTEP 2 — BUILD A PRE-FILLED SUMMARY:\nBased on what you extracted, draft a summary with these sections:\n- GOAL: (from description)\n- INPUTS: (specific data sources, URLs, commands mentioned)\n- OUTPUTS: (what the user expects to get)\n- EXTERNAL_SERVICES: (any APIs, webhooks, URLs, tools mentioned)\n- HUMAN_CHECKPOINTS: (infer: simple tasks = none, complex = maybe)\n- PARALLELISM: (infer from description)\n- DOMAIN: (infer from description)\n- DETAILS: (any specific technical details like API keys, endpoints, commands, file paths)\n\nSTEP 3 — ASK ONLY ABOUT GAPS:\nPresent your pre-filled summary to the user using the AskUserQuestion tool, and ask ONLY about things that are unclear or missing. For example:\n- If the user said \"ping 8.8.8.8 and send via Telegram\" — you already know the goal, input (ping command), output (Telegram message), and services (Telegram API). You might only need to ask: \"Do you have a Telegram Bot API token?\" and \"Should this run once or on a schedule?\"\n- If the user said \"research competitors\" — that is vague, so you would need to ask more questions about which competitors, what sources, what output format.\n- NEVER ask questions whose answers are obvious from the description. If the description says \"fetch RSS feeds\", do NOT ask \"What kind of inputs?\" with generic options.\n\nWhen using AskUserQuestion:\n- Include a free-text option like \"Other (I'll type my answer)\" as the LAST option in every question\n- Make the options SPECIFIC to what the user described, not generic categories\n- Ask at most 2-3 questions. If the description is detailed enough, skip straight to the summary.\n\nSTEP 4 — PRESENT FINAL SUMMARY:\nAfter any clarifications, present the complete structured summary with all sections filled in using concrete details from the description and the user's answers. Ask the user to review.\n\nIf they confirm it looks good, output ===CONFIRMED=== at the very end of your response. Do NOT output ===CONFIRMED=== until the user explicitly approves. Never mention this marker to the user — it is an internal pipeline signal.",
+              "interactive": true,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": []
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "8",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 50,
+            "pos_y": 300
+          },
+          "3": {
+            "id": 3,
+            "name": "llm_router",
+            "data": {
+              "type_id": "llm_router",
+              "name": "Domain Classifier",
+              "routing_prompt": "Classify the following interview summary into exactly one domain category based on the user's stated domain and the nature of their pipeline.\n\nCategories:\n- Route 1: Business/Strategy — pipelines for business planning, product strategy, market analysis, stakeholder management\n- Route 2: Creative/Content — pipelines for content creation, storytelling, design, media production\n- Route 3: Technical/Engineering — pipelines for software development, code analysis, architecture, deployment\n- Route 4: Research/Academic/Other — pipelines for research, analysis, academic work, or anything not fitting the above\n\nRespond with ONLY the route number (1, 2, 3, or 4). Nothing else.",
+              "model": "haiku",
+              "route_count": "4"
+            },
+            "class": "llm_router",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "2",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "4",
+                    "output": "input_1"
+                  }
+                ]
+              },
+              "output_2": {
+                "connections": [
+                  {
+                    "node": "5",
+                    "output": "input_1"
+                  }
+                ]
+              },
+              "output_3": {
+                "connections": [
+                  {
+                    "node": "6",
+                    "output": "input_1"
+                  }
+                ]
+              },
+              "output_4": {
+                "connections": [
+                  {
+                    "node": "7",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 400,
+            "pos_y": 300
+          },
+          "4": {
+            "id": 4,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Business Context",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "product-manager",
+              "prompt": "You are a DISCOVERY AGENT gathering requirements — NOT an implementer. Do NOT use Bash, Write, Edit, or any file-modifying tools. Do NOT create files, run commands, or build anything. Your ONLY job is to ask clarifying questions and produce a text summary.\n\nThe user wants to build a pipeline classified as Business/Strategy. You have the interview summary as context.\n\nREAD THE INTERVIEW SUMMARY CAREFULLY. It contains the user's goal, inputs, outputs, and details already gathered. Do NOT re-ask anything that is already clear.\n\nYour job is to fill in business-specific gaps only. Based on what's MISSING from the summary, ask at most 2-3 targeted follow-up questions using AskUserQuestion. Examples of what might be missing:\n- Who consumes the output (stakeholders)?\n- What format should deliverables be in?\n- Is this one-time or recurring?\n- Are there compliance requirements?\n\nAlways include a free-text \"Other\" option. Make options specific to the user's described use case.\n\nIf the interview summary is already detailed enough for a business pipeline, skip questions entirely and just produce the BUSINESS CONTEXT section.\n\nAfter any clarifications, produce a structured BUSINESS CONTEXT section that adds business-specific details on top of what the interview already captured. Include: stakeholders, deliverable format, cadence, and any compliance needs.\n\nThen ask the user to confirm. If they approve, output ===CONFIRMED=== at the very end. Never mention this marker to the user. Do NOT continue working after outputting ===CONFIRMED===.",
+              "interactive": true,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "8",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 750,
+            "pos_y": 50
+          },
+          "5": {
+            "id": 5,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Creative Context",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "narrative-designer",
+              "prompt": "You are a DISCOVERY AGENT gathering requirements — NOT an implementer. Do NOT use Bash, Write, Edit, or any file-modifying tools. Do NOT create files, run commands, or build anything. Your ONLY job is to ask clarifying questions and produce a text summary.\n\nThe user wants to build a pipeline classified as Creative/Content. You have the interview summary as context.\n\nREAD THE INTERVIEW SUMMARY CAREFULLY. It contains the user's goal, inputs, outputs, and details already gathered. Do NOT re-ask anything that is already clear.\n\nYour job is to fill in creative-specific gaps only. Based on what's MISSING from the summary, ask at most 2-3 targeted follow-up questions using AskUserQuestion. Examples of what might be missing:\n- What medium/format for the creative output?\n- Who is the target audience?\n- What tone and style?\n- Iterative with revisions or one-shot?\n\nAlways include a free-text \"Other\" option. Make options specific to the user's described use case.\n\nIf the interview summary is already detailed enough, skip questions entirely and just produce the CREATIVE CONTEXT section.\n\nAfter any clarifications, produce a structured CREATIVE CONTEXT section that adds creative-specific details. Include: medium, audience, tone, iteration model.\n\nThen ask the user to confirm. If they approve, output ===CONFIRMED=== at the very end. Never mention this marker to the user. Do NOT continue working after outputting ===CONFIRMED===.",
+              "interactive": true,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "input": "output_2"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "8",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 750,
+            "pos_y": 230
+          },
+          "6": {
+            "id": 6,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Technical Context",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "architect-general",
+              "prompt": "You are a DISCOVERY AGENT gathering requirements — NOT an implementer. Do NOT use Bash, Write, Edit, or any file-modifying tools. Do NOT create files, run commands, or build anything. Your ONLY job is to ask clarifying questions and produce a text summary.\n\nThe user wants to build a pipeline classified as Technical/Engineering. You have the interview summary as context.\n\nREAD THE INTERVIEW SUMMARY CAREFULLY. It already contains the user's goal, inputs, outputs, external services, and technical details. Do NOT re-ask anything that is already clear.\n\nFill in technical gaps only. Based on what's MISSING, ask at most 2-3 targeted follow-up questions using AskUserQuestion. Examples:\n- Specific URLs, API endpoints, or commands (if mentioned but not detailed)\n- Authentication method for external APIs (API key, OAuth, none)\n- Output format or destination\n\nAlways include a free-text \"Other\" option. Make options specific to the user's use case.\n\nIf the summary already has all technical details, skip questions entirely.\n\nAfter any clarifications, produce a structured TECHNICAL CONTEXT section as plain text listing: all external services/URLs/APIs with their authentication, commands to run, data flow steps, and output destination. Be concrete — use actual URLs, commands, and service names from the description.\n\nThen ask the user to confirm. If they approve, output ===CONFIRMED=== at the very end. Do NOT continue after outputting ===CONFIRMED===. Never mention this marker to the user. Do NOT continue working after outputting ===CONFIRMED===.",
+              "interactive": true,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "input": "output_3"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "8",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 750,
+            "pos_y": 410
+          },
+          "7": {
+            "id": 7,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Research Context",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "historian",
+              "prompt": "You are a DISCOVERY AGENT gathering requirements — NOT an implementer. Do NOT use Bash, Write, Edit, or any file-modifying tools. Do NOT create files, run commands, or build anything. Your ONLY job is to ask clarifying questions and produce a text summary.\n\nThe user wants to build a pipeline classified as Research/Academic (or a domain that didn't fit other categories). You have the interview summary as context.\n\nREAD THE INTERVIEW SUMMARY CAREFULLY. It already contains the user's goal, inputs, outputs, and details. Do NOT re-ask anything that is already clear.\n\nYour job is to fill in research-specific gaps only. Based on what's MISSING from the summary, ask at most 2-3 targeted follow-up questions using AskUserQuestion. Examples of what might be missing:\n- Research methodology (if not obvious from the goal)\n- Specific sources or data to consult\n- Depth of analysis needed\n- Output format\n\nAlways include a free-text \"Other\" option. Make options specific to the user's described use case.\n\nIf the interview summary already has enough detail, skip questions entirely and just produce the RESEARCH CONTEXT section.\n\nAfter any clarifications, produce a structured RESEARCH CONTEXT section with: methodology, sources, depth, output format, and any domain-specific considerations.\n\nThen ask the user to confirm. If they approve, output ===CONFIRMED=== at the very end. Never mention this marker to the user. Do NOT continue working after outputting ===CONFIRMED===.",
+              "interactive": true,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "input": "output_4"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "8",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 750,
+            "pos_y": 590
+          },
+          "8": {
+            "id": 8,
+            "name": "aggregator",
+            "data": {
+              "type_id": "aggregator",
+              "name": "Discovery Aggregator",
+              "strategy": "numbered_list",
+              "separator": "\n\n---\n\n"
+            },
+            "class": "aggregator",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "2",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "4",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "5",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "6",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "7",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "9",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 1100,
+            "pos_y": 300
+          },
+          "9": {
+            "id": 9,
+            "name": "file_writer",
+            "data": {
+              "type_id": "file_writer",
+              "name": "Write Discovery",
+              "filename": "DISCOVERY.md",
+              "source_section": "",
+              "context_priority": "P0 — must include"
+            },
+            "class": "file_writer",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "8",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 1400,
+            "pos_y": 300
+          }
+        }
+      },
+      "Pipeline Design": {
+        "data": {
+          "1": {
+            "id": 1,
+            "name": "phase_settings",
+            "data": {
+              "type_id": "phase_settings",
+              "name": "Phase Settings",
+              "phase_name": "Pipeline Design",
+              "phase_goal": "Design the pipeline architecture based on discovery findings and output a structured specification",
+              "success_criteria": "Pipeline architecture designed with rationale\nDesign reviewed and approved by user\nPIPELINE_SPEC.json written for downstream conversion",
+              "context_files": "DISCOVERY.md"
+            },
+            "class": "phase_settings",
+            "html": "",
+            "typenode": false,
+            "inputs": {},
+            "outputs": {},
+            "pos_x": 50,
+            "pos_y": 50
+          },
+          "2": {
+            "id": 2,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Pipeline Architect",
+              "mode": "standard",
+              "model": "opus",
+              "expert": "architect-general",
+              "prompt": "You are designing a Drawflow pipeline template based on discovery requirements. Your context includes DISCOVERY.md with the user's goals, domain, inputs, outputs, and preferences.\n\nFirst, use the Read tool to read the pipeline schema reference file:\n- Path: .taktis/PIPELINE_SCHEMA.md (relative to your working directory)\nThis file is automatically provisioned into every project's .taktis/ directory.\n\nThis schema file documents ALL available node types (agent, conditional, llm_router, fan_out, loop, human_gate, output_parser, aggregator, text_transform, file_writer, plan_applier, api_call, phase_settings), their configuration fields, available expert slugs (184 experts across 18 categories), and design patterns.\n\nBased on the discovery requirements AND the schema reference, design a complete pipeline:\n\n1. Choose appropriate node types for each step\n2. Select expert personas that match the domain\n3. Design the flow: linear, parallel, branching, or looping as needed\n4. Include human gates where the user requested checkpoints\n5. Use the correct number of parallel tracks as specified\n6. Write file_writer nodes for important intermediate artifacts\n7. Consider using output_parser for structured outputs\n8. Use aggregator nodes to merge parallel tracks\n9. Use api_call nodes (method: GET) for fetching external data — RSS feeds, public APIs, webhooks. Place multiple api_call nodes without upstream connections to execute them in parallel (same wave).\n10. When the user needs data from multiple external sources, create one api_call node PER source URL, then connect them all to a single aggregator node.\n11. Study the \"Common Pipeline Patterns — Complete Examples\" section in PIPELINE_SCHEMA.md. It contains ready-made example specs for common patterns like RSS aggregation, research pipelines, and classify-and-route. Match the user's requirements to the closest pattern and adapt it.\n12. Prefer concrete, specific node configurations over vague ones. For api_call nodes, use real URLs from the discovery document. For agent prompts, include specific instructions about the data format they'll receive.\n\nOutput your design in exactly two sections:\n\n===RATIONALE===\nExplain your design decisions:\n- Why you chose each node type\n- Why you selected specific experts\n- How the flow addresses the user's goals\n- What design patterns you applied (from the schema doc)\n- Any trade-offs or alternatives considered\n\n===PIPELINE_SPEC===\nOutput the pipeline specification in this exact JSON format:\n{\n  \"name\": \"Pipeline Name\",\n  \"description\": \"What it does\",\n  \"nodes\": [\n    {\n      \"id\": \"1\",\n      \"type\": \"node_type\",\n      \"name\": \"Node Name\",\n      \"config\": { ...type-specific fields... },\n      \"connections_to\": [\"2\", \"3\"]\n    }\n  ]\n}\n\nFor nodes with multiple output ports (conditional, llm_router, human_gate, loop), use:\n  \"connections_to\": { \"output_1\": [\"4\"], \"output_2\": [\"5\"] }\n\nDo NOT use any tools for writing files. (You should still use the Read tool to read the schema file.) — your entire output must be text containing these two sections. The downstream parser and file writers will handle persistence.\n\nIMPORTANT CONSTRAINTS:\n- The pipeline factory produces SINGLE-PHASE pipelines only. Do not attempt multi-phase designs. Use wave ordering within a single phase for sequential execution.\n- The graph MUST be a DAG (no cycles). Use the loop node for retry/revision patterns instead of back-edges.\n- Only use expert slugs listed in PIPELINE_SCHEMA.md. Do not invent expert slugs.\n- Do not include phase_settings or pipeline_generator nodes in the generated spec.\n- Output the JSON directly after the ===PIPELINE_SPEC=== marker. No markdown fences (no ```json```), no commentary, just the raw JSON object.\n- When the discovery document mentions RSS feeds, news sources, APIs, or external data: you MUST use api_call nodes with the actual URLs. Do NOT use agent nodes to \"fetch\" data — agents cannot make HTTP requests. Only api_call nodes can reach external URLs.\n- For api_call nodes that fetch data (GET requests): set method to \"GET\", content_type to \"text/plain\", headers to \"{}\", body_template to \"\" (empty), and timeout_seconds to \"30\" or \"60\".\n\nCRITICAL RULE FOR INTERACTIVE AGENTS: Any agent node with \"interactive\": true MUST include a confirmation flow in its prompt. The prompt must tell the agent to present its results, ask the user to confirm, and output ===CONFIRMED=== at the very end when the user approves. Without this marker, the task blocks the wave forever. Never tell the agent to mention ===CONFIRMED=== to the user — it is an internal pipeline signal. Example suffix for interactive prompts: \"After completing your work, present a summary and ask the user to review. If they confirm, output ===CONFIRMED=== at the end.\"",
+              "interactive": false,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": []
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 50,
+            "pos_y": 300
+          },
+          "3": {
+            "id": 3,
+            "name": "output_parser",
+            "data": {
+              "type_id": "output_parser",
+              "name": "Design Parser",
+              "markers": "===RATIONALE===\n===PIPELINE_SPEC===",
+              "section_names": "rationale\npipeline_spec"
+            },
+            "class": "output_parser",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "2",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "4",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "5",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 450,
+            "pos_y": 300
+          },
+          "4": {
+            "id": 4,
+            "name": "file_writer",
+            "data": {
+              "type_id": "file_writer",
+              "name": "Write Design Rationale",
+              "filename": "PIPELINE_DESIGN.md",
+              "source_section": "rationale",
+              "context_priority": "P1 — high"
+            },
+            "class": "file_writer",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 800,
+            "pos_y": 150
+          },
+          "5": {
+            "id": 5,
+            "name": "human_gate",
+            "data": {
+              "type_id": "human_gate",
+              "name": "Review Design",
+              "gate_message": "Review the pipeline design rationale (PIPELINE_DESIGN.md) and the pipeline specification. Approve to write the final PIPELINE_SPEC.json, or reject to stop and redesign manually.",
+              "show_upstream": true
+            },
+            "class": "human_gate",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "6",
+                    "output": "input_1"
+                  }
+                ]
+              },
+              "output_2": {
+                "connections": []
+              }
+            },
+            "pos_x": 800,
+            "pos_y": 350
+          },
+          "6": {
+            "id": 6,
+            "name": "file_writer",
+            "data": {
+              "type_id": "file_writer",
+              "name": "Write Pipeline Spec",
+              "filename": "PIPELINE_SPEC.json",
+              "source_section": "pipeline_spec",
+              "context_priority": "P0 — must include"
+            },
+            "class": "file_writer",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "5",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "7",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 1150,
+            "pos_y": 350
+          },
+          "7": {
+            "id": 7,
+            "name": "pipeline_generator",
+            "data": {
+              "type_id": "pipeline_generator",
+              "name": "Create Pipeline Template",
+              "source_section": "pipeline_spec",
+              "template_name_prefix": "Generated"
+            },
+            "class": "pipeline_generator",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "6",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 1500,
+            "pos_y": 350
+          }
+        }
+      }
+    }
+  },
+  "is_default": true
+}

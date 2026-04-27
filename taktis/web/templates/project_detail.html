@@ -1,0 +1,549 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — Taktis{% endblock %}
+
+{% block content %}
+<style>
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .phase-card { animation: fadeInUp 0.2s ease-out backwards; }
+  .phase-card:nth-child(2) { animation-delay: 50ms; }
+  .phase-card:nth-child(3) { animation-delay: 100ms; }
+  .phase-card:nth-child(4) { animation-delay: 150ms; }
+  .phase-card:nth-child(5) { animation-delay: 200ms; }
+  .phase-card:nth-child(6) { animation-delay: 250ms; }
+  .phase-in-progress-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse-dot 2s ease-in-out infinite;
+    margin-right: 0.4rem;
+    vertical-align: middle;
+  }
+</style>
+<nav class="breadcrumb">
+  <a href="/">Dashboard</a> <span class="sep">/</span>
+  <a href="/projects">Projects</a> <span class="sep">/</span>
+  <span class="current">{{ project.name }}</span>
+</nav>
+<h1>{{ project.name }}</h1>
+
+<!-- SSE connection for live status updates (vanilla JS) -->
+<script>
+(function() {
+  var es = new EventSource('/events/project/{{ project.name }}');
+  var reconnectDelay = 1000;
+
+  es.addEventListener('status', function(e) {
+    try {
+      var updates = JSON.parse(e.data);
+      // Server says to reload (e.g. new phases created)
+      if (updates['__reload__']) { location.reload(); return; }
+      for (var id in updates) {
+        var html = updates[id];
+        // Handle new task rows — append to phase tbody (skip if row already exists)
+        if (id.startsWith('new-task-row-')) {
+          // Extract task_id from the row HTML to check for duplicates
+          var match = html.match(/id="task-row-([^"]+)"/);
+          if (match && document.getElementById('task-row-' + match[1])) continue;
+          var pn = id.replace('new-task-row-', '');
+          var tbody = document.getElementById('phase-tbody-' + pn);
+          if (tbody) {
+            tbody.insertAdjacentHTML('beforeend', html);
+            var lastRow = tbody.lastElementChild;
+            if (lastRow) htmx.process(lastRow);
+          }
+          continue;
+        }
+        // If we get a phase-badge update for a phase not on the page, new phases were created — reload
+        if (id.startsWith('phase-badge-') && !document.getElementById(id)) {
+          location.reload();
+          return;
+        }
+        var el = document.getElementById(id);
+        if (el) {
+          if (html.charAt(0) === '<') {
+            el.outerHTML = html;
+            var newEl = document.getElementById(id);
+            if (newEl) htmx.process(newEl);
+          } else {
+            el.textContent = html;
+          }
+        }
+      }
+    } catch(err) {
+      console.warn('[sse] parse error:', err);
+    }
+  });
+
+  es.onerror = function() {
+    console.log('[sse] connection error, will auto-reconnect');
+  };
+
+  // Close connection on page unload to prevent stale connections
+  window.addEventListener('beforeunload', function() { es.close(); });
+
+  // Catch-up: if an in_progress phase has 0 task rows or no phases exist yet,
+  // the pipeline hasn't created them before the page loaded. Retry with
+  // increasing delays until tasks appear or we give up.
+  var _catchupAttempt = 0;
+  var _catchupDelays = [800, 1500, 2500, 4000];
+  function _catchupCheck() {
+    if (_catchupAttempt >= _catchupDelays.length) return;
+    var needsReload = false;
+    var tbodies = document.querySelectorAll('[id^="phase-tbody-"]');
+    tbodies.forEach(function(tbody) {
+      if (tbody.children.length === 0) {
+        var details = tbody.closest('details');
+        if (details) {
+          var badge = details.querySelector('[id^="phase-badge-"]');
+          if (badge) {
+            var st = badge.textContent.trim();
+            // Reload if phase is active OR just created (pipeline still starting)
+            if (st === 'in_progress' || st === 'not_started') {
+              needsReload = true;
+            }
+          }
+        }
+      }
+    });
+    // No phases at all but project exists — pipeline hasn't created phase yet
+    if (tbodies.length === 0) {
+      needsReload = true;
+    }
+    if (needsReload) {
+      location.reload();
+      return;
+    }
+    _catchupAttempt++;
+    if (_catchupAttempt < _catchupDelays.length) {
+      setTimeout(_catchupCheck, _catchupDelays[_catchupAttempt]);
+    }
+  }
+  setTimeout(_catchupCheck, _catchupDelays[0]);
+})();
+</script>
+
+<!-- Project Info -->
+<div class="panel">
+  <h2>Project Info</h2>
+  <dl class="info-grid">
+    <dt>Status</dt>
+    <dd>
+      <span id="project-status-badge" class="badge badge-{{ project.status | default('pending') }}" title="Current project status">
+        {{ project.status | default('pending') }}
+      </span>
+    </dd>
+    <dt>Working Dir</dt>
+    <dd><code>{{ project.working_dir }}</code></dd>
+    <dt>Total Cost</dt>
+    <dd id="project-total-cost" title="Sum of actual API costs across all tasks">${{ '{:.4f}'.format(project.total_cost_usd or 0) }}</dd>
+    <dt>Created</dt>
+    <dd>{{ project.created_at | dt }}</dd>
+    {% if project.planning_options %}
+      {% set opts = project.planning_options %}
+      {% if opts is string %}
+        {% set opts = opts | from_json %}
+      {% endif %}
+    {% endif %}
+  </dl>
+  <div style="margin-top:0.75rem; display:flex; gap:0.5rem; align-items:center;">
+    {% if project.status == 'archived' %}
+    <span class="badge badge-archived">Archived</span>
+    {% else %}
+    {% set has_pending = [] %}
+    {% for phase in phases %}{% for task in phase.tasks %}{% if task.status in ['pending', 'failed'] %}{% if has_pending.append(1) %}{% endif %}{% endif %}{% endfor %}{% endfor %}
+    {% if has_pending %}
+    <button class="btn-success" style="font-size:0.8rem;"
+            hx-post="/api/projects/{{ project.name }}/run"
+            hx-confirm="Run all phases sequentially?"
+            hx-swap="none">Run All Phases</button>
+    {% endif %}
+    {% endif %}
+    <a href="/projects/{{ project.name }}/timeline" class="btn" style="font-size:0.8rem; background:var(--bg-elevated); color:var(--accent); border:1px solid var(--accent); text-decoration:none;">Timeline</a>
+    <button class="btn-danger" style="font-size:0.8rem;"
+            onclick="if(confirm('Delete project \'{{ project.name }}\' and all its phases/tasks?')){
+              fetch('/api/projects/{{ project.name }}',{method:'DELETE',headers:{'X-CSRFToken':document.cookie.match(/csrf_token=([^;]*)/)?.[1]||''}}).then(()=>window.location='/projects');
+            }">Delete Project</button>
+  </div>
+</div>
+
+<!-- Environment Variables — substituted as ${VAR} in API Call node URLs/headers/body -->
+<details class="panel" style="margin-bottom:1rem;">
+  <summary style="cursor:pointer; font-weight:600; font-size:0.95rem; list-style:none;">
+    Environment Variables
+    <span class="text-muted" style="font-weight:400; font-size:0.78rem;">— substituted as <code>${VAR}</code> in API Call nodes</span>
+  </summary>
+  <div id="env-vars-rows" style="margin-top:1rem; display:flex; flex-direction:column; gap:0.5rem;"></div>
+  <div style="margin-top:0.75rem; display:flex; gap:0.5rem; align-items:center;">
+    <button type="button" class="btn btn-sm btn-ghost" onclick="addEnvVarRow()">+ Add Variable</button>
+    <button type="button" class="btn btn-sm" onclick="saveEnvVars()">Save</button>
+    <span id="env-vars-status" style="font-size:0.8rem; color:var(--text-muted);"></span>
+  </div>
+  <p class="text-muted" style="margin-top:0.75rem; font-size:0.78rem; line-height:1.5;">
+    Use for per-project config like <code>GH_REPO=anthropics/claude-code</code>. Real secrets (API tokens) should live in the host shell or <code>.env</code> — they're picked up automatically as a fallback when a variable isn't set here.
+  </p>
+</details>
+
+<script>
+(function() {
+  const projectName = {{ project.name | tojson }};
+  const initialEnvVars = {{ (project.default_env_vars or {}) | tojson }};
+
+  function escapeAttr(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function isSecretKey(k) { return /(TOKEN|KEY|SECRET|PASSWORD|PASS)/i.test(k); }
+
+  window.addEnvVarRow = function(k, v) {
+    const container = document.getElementById('env-vars-rows');
+    const row = document.createElement('div');
+    row.className = 'env-var-row';
+    row.style.cssText = 'display:flex; gap:0.5rem; align-items:center;';
+    const isSecret = isSecretKey(k || '');
+    row.innerHTML =
+      '<input type="text" class="env-key" placeholder="KEY" value="' + escapeAttr(k || '') + '" style="flex:1; max-width:220px;">' +
+      '<input type="' + (isSecret ? 'password' : 'text') + '" class="env-value" placeholder="value" value="' + escapeAttr(v || '') + '" style="flex:2;">' +
+      '<button type="button" class="btn btn-sm btn-ghost" title="Remove">×</button>';
+    row.querySelector('.env-key').addEventListener('input', function(e) {
+      row.querySelector('.env-value').type = isSecretKey(e.target.value) ? 'password' : 'text';
+    });
+    row.querySelector('button').addEventListener('click', function() { row.remove(); });
+    container.appendChild(row);
+  };
+
+  window.saveEnvVars = async function() {
+    const status = document.getElementById('env-vars-status');
+    const rows = document.querySelectorAll('.env-var-row');
+    const env_vars = {};
+    for (const row of rows) {
+      const k = row.querySelector('.env-key').value.trim();
+      const v = row.querySelector('.env-value').value;
+      if (k) env_vars[k] = v;
+    }
+    status.textContent = 'Saving…';
+    try {
+      const csrf = (document.cookie.match(/csrf_token=([^;]*)/) || [])[1] || '';
+      const resp = await fetch('/api/projects/' + encodeURIComponent(projectName) + '/env-vars', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+        body: JSON.stringify({ env_vars: env_vars }),
+      });
+      if (resp.ok) {
+        status.textContent = 'Saved';
+        setTimeout(function(){ status.textContent = ''; }, 2000);
+      } else {
+        const err = await resp.json().catch(function(){ return {}; });
+        status.textContent = 'Error: ' + (err.error || resp.status);
+      }
+    } catch (e) {
+      status.textContent = 'Error: ' + e.message;
+    }
+  };
+
+  // Initial render
+  const entries = Object.entries(initialEnvVars || {});
+  if (entries.length === 0) {
+    addEnvVarRow();
+  } else {
+    for (const [k, v] of entries) addEnvVarRow(k, v);
+  }
+})();
+</script>
+
+<!-- Pipeline progress (populated via SSE, or server-side if pending) -->
+<div id="pipeline-progress">
+{% if pending_gate and not pending_gate.phase_id %}
+{# Fallback: show top-level banner only if we can't determine which phase the gate belongs to #}
+<div class="pipeline-progress">
+  <div style="padding: 1rem; background: var(--bg-elevated); border-left: 3px solid #f97316; border-radius: 4px;">
+    <strong>Pipeline paused</strong> &mdash; {{ pending_gate.message or 'Waiting for approval' }}
+    <button class="btn btn-sm btn-primary"
+            hx-post="/api/pipelines/{{ project.id }}/approve-gate/{{ pending_gate.node_id }}"
+            hx-target="closest div"
+            hx-swap="outerHTML">
+      Approve
+    </button>
+    <button class="btn btn-sm"
+            hx-post="/api/pipelines/{{ project.id }}/reject-gate/{{ pending_gate.node_id }}"
+            hx-target="closest div"
+            hx-swap="outerHTML"
+            style="margin-left: 0.5rem;">
+      Reject
+    </button>
+  </div>
+</div>
+{% endif %}
+</div>
+
+<!-- Phases with their tasks -->
+{% for phase in phases %}
+<details class="panel phase-card" open>
+  <summary class="panel-header" style="cursor:pointer; list-style:none;">
+    <h2 style="display:inline;">{% if phase.status == 'in_progress' %}<span class="phase-in-progress-indicator" title="In progress"></span>{% endif %}Phase {{ phase.phase_number }}: {{ phase.name }}</h2>
+    <div style="display:flex; gap:0.5rem; align-items:center;" onclick="event.stopPropagation()">
+      {% set phase_has_running = [] %}
+      {% for task in phase.tasks %}{% if task.status in ['running', 'awaiting_input'] %}{% if phase_has_running.append(1) %}{% endif %}{% endif %}{% endfor %}
+      {% if phase.status == 'in_progress' and phase.current_wave is not none and not phase_has_running %}
+      <span id="phase-badge-{{ phase.phase_number }}" class="badge badge-interrupted" title="Phase was interrupted mid-execution">Interrupted</span>
+      {% else %}
+      <span id="phase-badge-{{ phase.phase_number }}" class="badge badge-{{ phase.status | default('pending') }}" title="{% if phase.status == 'pending' %}Phase is waiting to be started{% elif phase.status == 'in_progress' %}Phase is currently running{% elif phase.status == 'complete' %}Phase finished successfully{% elif phase.status == 'failed' %}Phase encountered an error{% else %}{{ phase.status | default('pending') }}{% endif %}">{{ phase.status | default('pending') }}</span>
+      {% endif %}
+      {% set phase_has_pending = [] %}
+      {% for task in phase.tasks %}{% if task.status in ['pending', 'failed'] %}{% if phase_has_pending.append(1) %}{% endif %}{% endif %}{% endfor %}
+      {% if project.status != 'archived' %}
+      {% if phase.status == 'in_progress' and phase.current_wave is not none and not phase_has_running %}
+      <button class="btn-sm" style="background: rgba(230,126,34,0.2); color: #e67e22; border: 1px solid rgba(230,126,34,0.5);"
+              hx-post="/api/phases/{{ phase.id }}/resume"
+              hx-swap="none"
+              title="Resume this interrupted phase from wave {{ phase.current_wave }}">&#9654; Resume</button>
+      {% endif %}
+      {% if phase_has_pending %}
+      <button class="btn-sm btn-success"
+              hx-post="/api/phases/{{ project.name }}/{{ phase.phase_number }}/run"
+              hx-swap="none"
+              title="Execute all pending tasks in this phase wave-by-wave">Run Phase</button>
+      {% endif %}
+      {% if phase.status in ('in_progress', 'failed') and not phase_has_running and phase.context_config and 'designer_phase' in (phase.context_config or '') %}
+      <button class="btn-sm" style="background: rgba(59,130,246,0.2); color: #3b82f6; border: 1px solid rgba(59,130,246,0.5);"
+              hx-post="/api/phases/{{ phase.id }}/resume-pipeline"
+              hx-swap="none"
+              hx-confirm="Resume this pipeline from where it left off? Completed tasks will be reused."
+              title="Resume the pipeline executor — restores results from completed tasks and continues">&#9654; Resume Pipeline</button>
+      {% endif %}
+      {% endif %}
+    </div>
+  </summary>
+  {% if phase.goal %}
+  <p class="text-muted" style="margin:0 0 0.75rem 0;">{{ phase.goal }}</p>
+  {% endif %}
+  <dl class="info-grid" style="margin-bottom:0.75rem;">
+    <dt>Tasks</dt>
+    <dd id="phase-task-count-{{ phase.phase_number }}">{{ phase.task_count | default(0) }}</dd>
+    <dt>Created</dt>
+    <dd>{{ phase.created_at | dt }}</dd>
+  </dl>
+
+
+  <!-- Phase tasks (always render table so SSE can append new rows) -->
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Task ID</th>
+          <th>Status</th>
+          <th title="Wave controls execution order; same-wave tasks run in parallel">Wave</th>
+          <th title="AI persona used for this task">Expert</th>
+          <th title="Actual API cost in USD (input + output tokens)">Cost</th>
+          <th title="Percentage of model context window used">Context</th>
+          <th>Created</th>
+          <th>Prompt</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="phase-tbody-{{ phase.phase_number }}">
+        {% for task in phase.tasks %}
+        <tr id="task-row-{{ task.id }}">
+          <td><a href="/tasks/{{ task.id }}" class="mono">{{ task.id[:12] }}</a></td>
+          <td><span id="task-badge-{{ task.id }}" class="badge badge-{{ task.status }}" title="{% if task.status == 'pending' %}Task is waiting to be started{% elif task.status == 'running' %}Task is currently running{% elif task.status == 'awaiting_input' %}Task needs user input or tool approval{% elif task.status == 'completed' %}Task finished successfully{% elif task.status == 'failed' %}Task encountered an error{% elif task.status == 'cancelled' %}Task was cancelled{% else %}{{ task.status }}{% endif %}">{{ task.status }}</span></td>
+          <td>{{ task.wave | default('—') }}</td>
+          <td>{{ task.expert or '—' }}</td>
+          <td><span id="task-cost-{{ task.id }}">{{ '${:.4f}'.format(task.cost_usd) if task.cost_usd else '—' }}</span></td>
+          <td><span id="task-context-{{ task.id }}">{% set peak = task.peak_input_tokens or 0 %}{% set total_in = task.input_tokens or 0 %}{% set ctx_window = ctx_windows.get(task.model or 'sonnet', 200000) %}{% if peak > 0 %}{% set pct = ((peak / ctx_window) * 100)|round(0)|int %}{{ pct }}%{% elif total_in > 0 %}—{% else %}—{% endif %}</span></td>
+          <td>{{ task.created_at | dt }}</td>
+          <td><span class="text-truncate">{{ task.prompt[:80] if task.prompt else '—' }}</span></td>
+          <td>
+            <span id="task-actions-{{ task.id }}">
+            {% if project.status != 'archived' %}
+            {% if task.status in ['pending', 'failed'] %}
+            {% if task.status == 'pending' and task.task_type not in ['planner', 'discuss_task', 'task_researcher', 'phase_review', 'phase_review_fix'] %}
+            <button class="btn-sm" hx-post="/api/tasks/{{ task.id }}/discuss" hx-swap="none" title="Discuss implementation decisions" style="font-size:0.7rem;">D</button>
+            <button class="btn-sm" hx-post="/api/tasks/{{ task.id }}/research" hx-swap="none" title="Research domain concerns" style="font-size:0.7rem;">R</button>
+            <button class="btn-sm" onclick="document.getElementById('help-modal-dr').showModal()"
+                    style="font-size:0.6rem; padding:0.05rem 0.25rem; background:transparent; color:var(--text-muted); border:1px solid var(--border); cursor:pointer; border-radius:50%;"
+                    title="What are D &amp; R?">?</button>
+            {% endif %}
+            <button class="btn-sm btn-success"
+                    hx-post="/api/tasks/{{ task.id }}/start"
+                    hx-swap="none">{% if task.status == 'failed' %}Retry{% else %}Start{% endif %}</button>
+            {% elif task.status == 'completed' %}
+            <button class="btn-sm"
+                    hx-post="/api/tasks/{{ task.id }}/start"
+                    hx-confirm="Re-run this task?"
+                    hx-swap="none">Re-run</button>
+            {% elif task.status == 'running' %}
+            <button class="btn-sm btn-danger"
+                    hx-post="/api/tasks/{{ task.id }}/stop"
+                    hx-swap="none">Stop</button>
+            {% elif task.status == 'awaiting_input' %}
+            <button class="btn-sm"
+                    onclick="window.location='/tasks/{{ task.id }}'">Reply</button>
+            {% endif %}
+            {% endif %}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+        {% if pending_gate and pending_gate.phase_id == phase.id %}
+        <tr style="background: rgba(249,115,22,0.08);">
+          <td><span class="mono" style="color: #f97316;">&#x2759; gate</span></td>
+          <td><span class="badge" style="background:rgba(249,115,22,0.2); color:#f97316;">waiting</span></td>
+          <td>&mdash;</td>
+          <td>{{ pending_gate.node_name }}</td>
+          <td colspan="4" style="text-align:left;">
+            <div style="margin-bottom:0.4rem;">{{ pending_gate.message or 'Waiting for approval' }}</div>
+            {% if pending_gate.upstream_preview %}
+            <details style="margin-bottom:0.5rem;">
+              <summary style="cursor:pointer; font-size:0.75rem; color:var(--text-muted);">Preview upstream output</summary>
+              <pre style="font-size:0.72rem; max-height:200px; overflow:auto; margin:0.3rem 0; padding:0.5rem; background:var(--bg); border-radius:4px; white-space:pre-wrap;">{{ pending_gate.upstream_preview }}</pre>
+            </details>
+            {% endif %}
+            <button class="btn btn-sm btn-primary"
+                    hx-post="/api/pipelines/{{ project.id }}/approve-gate/{{ pending_gate.node_id }}"
+                    hx-target="closest tr"
+                    hx-swap="outerHTML">
+              Approve
+            </button>
+            <button class="btn btn-sm"
+                    hx-post="/api/pipelines/{{ project.id }}/reject-gate/{{ pending_gate.node_id }}"
+                    hx-target="closest tr"
+                    hx-swap="outerHTML"
+                    style="margin-left: 0.5rem;">
+              Reject
+            </button>
+          </td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Add Task to this phase -->
+  {% if project.status != 'archived' %}
+  <details class="mt-1">
+    <summary style="cursor:pointer; color:var(--accent); font-size:0.9rem;">+ Add Task</summary>
+    <form hx-post="/api/projects/{{ project.name }}/tasks"
+          hx-swap="none"
+          hx-on::after-request="location.reload()"
+          style="margin-top:0.75rem;">
+      <input type="hidden" name="phase_number" value="{{ phase.phase_number }}">
+      <div class="form-row">
+        <div>
+          <label for="task_expert_{{ phase.phase_number }}">Expert</label>
+          <select id="task_expert_{{ phase.phase_number }}" name="expert">
+            <option value="">— auto —</option>
+            {% for expert in experts %}
+            <option value="{{ expert.name }}">{{ expert.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="task_wave_{{ phase.phase_number }}">Wave</label>
+          <input type="number" id="task_wave_{{ phase.phase_number }}" name="wave" value="1" min="1">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="task_prompt_{{ phase.phase_number }}">Prompt</label>
+        <textarea id="task_prompt_{{ phase.phase_number }}" name="prompt" required placeholder="Describe what this task should accomplish..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" name="interactive" style="width:auto; margin-right:0.4rem;">
+          Interactive mode
+        </label>
+      </div>
+      <button type="submit">Add Task</button>
+    </form>
+  </details>
+  {% endif %}
+</details>
+{% if pending_plan_approval and phase.status in ['complete', 'in_progress'] and loop.last %}
+<div id="plan-approval-inline" style="padding:1.25rem 1.5rem;margin:0.5rem 0 1rem;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.35);border-left:4px solid var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;">
+  <div style="flex:1;min-width:200px;">
+    <strong style="font-size:1.1rem;color:var(--text-primary);">Pipeline plan is ready for review</strong>
+    <p style="margin:0.35rem 0 0;color:var(--text-muted);font-size:0.9rem;">Review the requirements and roadmap above, then apply to start execution.</p>
+  </div>
+  <button class="btn btn-primary"
+          style="font-size:1rem;padding:0.6rem 1.5rem;white-space:nowrap;"
+          hx-post="/api/pipelines/{{ project.id }}/approve-plan"
+          hx-swap="none">
+    Apply Plan &amp; Start Execution
+  </button>
+</div>
+{% endif %}
+{% endfor %}
+
+{% if not phases %}
+<div class="panel">
+  <p class="text-muted" style="text-align:center; padding:1.5rem 0;">No phases defined. Add one below to get started.</p>
+</div>
+{% endif %}
+
+<!-- Help modal for Discuss & Research -->
+<dialog id="help-modal-dr">
+  <h3 style="margin-top:0;">Discuss &amp; Research</h3>
+  <p style="color:var(--text-muted); margin-bottom:1rem;">Optional prep steps you can run on individual tasks <strong>before</strong> executing them.</p>
+
+  <h4 style="margin-bottom:0.25rem;">D &mdash; Discuss</h4>
+  <p style="font-size:0.85rem;">Opens an <strong>interactive chat</strong> about <em>how</em> to implement the specific task. Identifies gray areas &mdash; implementation approach, library choices, data structures &mdash; and asks your preference for each. Decisions are saved to <code>DISCUSS_{task_id}.md</code> and injected into the task's context.</p>
+
+  <h4 style="margin-bottom:0.25rem;">R &mdash; Research</h4>
+  <p style="font-size:0.85rem;">Runs a <strong>non-interactive</strong> task that investigates domain-specific concerns for the task: standard patterns, recommended libraries, code examples, common pitfalls, and testing strategies. If you ran Discuss first, your locked decisions are respected. Output saved to <code>RESEARCH_{task_id}.md</code>.</p>
+
+  <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.75rem;">Both files are automatically injected into the task's context when it runs. Neither is required &mdash; skip them for straightforward tasks.</p>
+
+  <form method="dialog"><button class="btn-sm" style="float:right;">Close</button></form>
+</dialog>
+<style>
+  #help-modal-dr {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 540px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-elevated);
+    color: var(--text);
+    padding: 1.5rem;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    margin: 0;
+  }
+  #help-modal-dr::backdrop { background: rgba(0,0,0,0.6); }
+  #help-modal-dr h4 { color: var(--accent, #3498db); }
+</style>
+
+<!-- New Phase Form -->
+{% if project.status != 'archived' %}
+<div class="panel">
+  <h2>Add Phase</h2>
+  <form hx-post="/api/projects/{{ project.name }}/phases"
+        hx-swap="none"
+        hx-on::after-request="location.reload()">
+    <div class="form-row">
+      <div>
+        <label for="phase_name">Phase Name</label>
+        <input type="text" id="phase_name" name="name" required placeholder="implementation">
+      </div>
+      <div>
+        <label for="phase_goal">Goal</label>
+        <input type="text" id="phase_goal" name="goal" placeholder="Describe the phase goal">
+      </div>
+      <div style="display:flex; align-items:flex-end;">
+        <button type="submit">Add Phase</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% with advisor_title="Project Advisor", advisor_subtitle="Get suggestions for next steps or discuss architecture decisions.", advisor_placeholder="Ask about this project..." %}
+{% include "partials/advisor_widget.html" %}
+{% endwith %}
+
+<script>
+initAdvisor('project', '{{ project.id }}');
+</script>
+
+{% endblock %}

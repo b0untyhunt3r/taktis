@@ -1,0 +1,855 @@
+{
+  "name": "Project Planner",
+  "description": "Full planning pipeline: Depth Chooser -> Conditional -> Interview (Simple: skip research / Deep: full research) -> Synthesis -> Roadmap -> Parse -> Verify -> Apply",
+  "flow_json": {
+    "drawflow": {
+      "Home": {
+        "data": {
+          "1": {
+            "id": 1,
+            "name": "agent",
+            "data": {
+              "name": "Interview Simple",
+              "type_id": "agent",
+              "mode": "template",
+              "template": "SIMPLE_INTERVIEW",
+              "model": "opus",
+              "interactive": true,
+              "inject_description": true,
+              "inject_expert_options": true,
+              "expert": "interviewer",
+              "expert_id": "29369d0d83af5f6fa55fd82044b33df0",
+              "prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"agent\" style=\"border-left-color:#3b82f6\"><div class=\"node-title\">Interview</div><div class=\"node-subtitle\">interviewer</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "20",
+                    "input": "output_2"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "6",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 50,
+            "pos_y": 280
+          },
+          "2": {
+            "id": 2,
+            "name": "agent",
+            "data": {
+              "name": "Research: Stack",
+              "type_id": "agent",
+              "mode": "template",
+              "expert": "stack-researcher",
+              "template": "RESEARCHER_CONTEXT",
+              "model": "sonnet",
+              "inject_description": true,
+              "variable_map": "{\"interview\":\"Interview Deep\"}",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"agent\" style=\"border-left-color:#3b82f6\"><div class=\"node-title\">Research: Stack</div><div class=\"node-subtitle\">stack-researcher</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "21",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "14",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "6",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 380,
+            "pos_y": 50
+          },
+          "3": {
+            "id": 3,
+            "name": "agent",
+            "data": {
+              "name": "Research: Features",
+              "type_id": "agent",
+              "mode": "template",
+              "expert": "features-researcher",
+              "template": "RESEARCHER_CONTEXT",
+              "model": "sonnet",
+              "inject_description": true,
+              "variable_map": "{\"interview\":\"Interview Deep\"}",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"agent\" style=\"border-left-color:#3b82f6\"><div class=\"node-title\">Research: Features</div><div class=\"node-subtitle\">features-researcher</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "21",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "15",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "6",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 380,
+            "pos_y": 200
+          },
+          "4": {
+            "id": 4,
+            "name": "agent",
+            "data": {
+              "name": "Research: Architecture",
+              "type_id": "agent",
+              "mode": "template",
+              "expert": "architecture-researcher",
+              "template": "RESEARCHER_CONTEXT",
+              "model": "sonnet",
+              "inject_description": true,
+              "variable_map": "{\"interview\":\"Interview Deep\"}",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"agent\" style=\"border-left-color:#3b82f6\"><div class=\"node-title\">Research: Architecture</div><div class=\"node-subtitle\">architecture-researcher</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "21",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "16",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "6",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 380,
+            "pos_y": 350
+          },
+          "5": {
+            "id": 5,
+            "name": "agent",
+            "data": {
+              "name": "Research: Pitfalls",
+              "type_id": "agent",
+              "mode": "template",
+              "expert": "pitfalls-researcher",
+              "template": "RESEARCHER_CONTEXT",
+              "model": "sonnet",
+              "inject_description": true,
+              "variable_map": "{\"interview\":\"Interview Deep\"}",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"agent\" style=\"border-left-color:#3b82f6\"><div class=\"node-title\">Research: Pitfalls</div><div class=\"node-subtitle\">pitfalls-researcher</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "21",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "17",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "6",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 380,
+            "pos_y": 500
+          },
+          "6": {
+            "id": 6,
+            "name": "agent",
+            "data": {
+              "name": "Synthesizer",
+              "type_id": "agent",
+              "mode": "template",
+              "expert": "synthesizer",
+              "template": "SYNTHESIZER",
+              "model": "opus",
+              "inject_description": true,
+              "variable_map": "{\"interview\":\"Interview Simple\",\"research_stack\":\"Research: Stack\",\"research_features\":\"Research: Features\",\"research_architecture\":\"Research: Architecture\",\"research_pitfalls\":\"Research: Pitfalls\"}",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"agent\" style=\"border-left-color:#3b82f6\"><div class=\"node-title\">Synthesizer</div><div class=\"node-subtitle\">synthesizer</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "1",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "2",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "3",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "4",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "5",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "18",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "7",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 820,
+            "pos_y": 280
+          },
+          "7": {
+            "id": 7,
+            "name": "agent",
+            "data": {
+              "name": "Roadmapper",
+              "type_id": "agent",
+              "mode": "template",
+              "expert": "roadmapper",
+              "template": "ROADMAPPER",
+              "model": "opus",
+              "inject_description": true,
+              "inject_expert_options": true,
+              "variable_map": "{\"interview\":\"Interview Simple\",\"synthesizer\":\"Synthesizer\"}",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"agent\" style=\"border-left-color:#3b82f6\"><div class=\"node-title\">Roadmapper</div><div class=\"node-subtitle\">roadmapper</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "6",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "8",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 1220,
+            "pos_y": 280
+          },
+          "8": {
+            "id": 8,
+            "name": "output_parser",
+            "data": {
+              "name": "Output Parser",
+              "type_id": "output_parser",
+              "markers": "===REQUIREMENTS===\n===ROADMAP===\n===PLAN===",
+              "section_names": "requirements\nroadmap\nplan"
+            },
+            "class": "output_parser",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"output_parser\" style=\"border-left-color:#f59e0b\"><div class=\"node-title\">Output Parser</div><div class=\"node-subtitle\">output_parser</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "7",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "9",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "10",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "11",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 1520,
+            "pos_y": 200
+          },
+          "9": {
+            "id": 9,
+            "name": "file_writer",
+            "data": {
+              "name": "Write Requirements",
+              "type_id": "file_writer",
+              "filename": "REQUIREMENTS.md",
+              "source_section": "requirements",
+              "context_priority": "P2 — medium"
+            },
+            "class": "file_writer",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"file_writer\" style=\"border-left-color:#06b6d4\"><div class=\"node-title\">Write Requirements</div><div class=\"node-subtitle\">file_writer</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "8",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 1520,
+            "pos_y": 50
+          },
+          "10": {
+            "id": 10,
+            "name": "file_writer",
+            "data": {
+              "name": "Write Roadmap",
+              "type_id": "file_writer",
+              "filename": "ROADMAP.md",
+              "source_section": "roadmap",
+              "context_priority": "P2 — medium"
+            },
+            "class": "file_writer",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"file_writer\" style=\"border-left-color:#06b6d4\"><div class=\"node-title\">Write Roadmap</div><div class=\"node-subtitle\">file_writer</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "8",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 1520,
+            "pos_y": 400
+          },
+          "11": {
+            "id": 11,
+            "name": "agent",
+            "data": {
+              "name": "Plan Checker",
+              "type_id": "agent",
+              "mode": "template",
+              "expert": "plan-checker",
+              "template": "PLAN_CHECKER",
+              "model": "opus",
+              "variable_map": "{\"interview\":\"Interview Simple\",\"requirements\":\"Output Parser.requirements\",\"roadmap\":\"Output Parser.roadmap\",\"plan\":\"Output Parser.plan\"}",
+              "retry_on_pattern": "NEEDS REVISION",
+              "max_retries": "2",
+              "retry_revision_template": "ROADMAPPER_REVISION",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"agent\" style=\"border-left-color:#3b82f6\"><div class=\"node-title\">Plan Checker</div><div class=\"node-subtitle\">plan-checker</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "8",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "12",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "13",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 1820,
+            "pos_y": 200
+          },
+          "12": {
+            "id": 12,
+            "name": "file_writer",
+            "data": {
+              "name": "Write Verification",
+              "type_id": "file_writer",
+              "filename": "VERIFICATION.md",
+              "context_priority": "P3 — low"
+            },
+            "class": "file_writer",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"file_writer\" style=\"border-left-color:#06b6d4\"><div class=\"node-title\">Write Verification</div><div class=\"node-subtitle\">file_writer</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "11",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 2093,
+            "pos_y": 273
+          },
+          "13": {
+            "id": 13,
+            "name": "plan_applier",
+            "data": {
+              "name": "Apply Plan",
+              "type_id": "plan_applier",
+              "await_approval": true,
+              "source_section": "plan"
+            },
+            "class": "plan_applier",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"plan_applier\" style=\"border-left-color:#10b981\"><div class=\"node-title\">Apply Plan</div><div class=\"node-subtitle\">plan_applier</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "11",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 2092,
+            "pos_y": 136
+          },
+          "14": {
+            "id": 14,
+            "name": "file_writer",
+            "data": {
+              "name": "Save: Stack",
+              "type_id": "file_writer",
+              "filename": "research/STACK.md"
+            },
+            "class": "file_writer",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"file_writer\" style=\"border-left-color:#06b6d4\"><div class=\"node-title\">Save: Stack</div><div class=\"node-subtitle\">file_writer</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "2",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 381,
+            "pos_y": 120
+          },
+          "15": {
+            "id": 15,
+            "name": "file_writer",
+            "data": {
+              "name": "Save: Features",
+              "type_id": "file_writer",
+              "filename": "research/FEATURES.md"
+            },
+            "class": "file_writer",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"file_writer\" style=\"border-left-color:#06b6d4\"><div class=\"node-title\">Save: Features</div><div class=\"node-subtitle\">file_writer</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "3",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 379,
+            "pos_y": 269
+          },
+          "16": {
+            "id": 16,
+            "name": "file_writer",
+            "data": {
+              "name": "Save: Architecture",
+              "type_id": "file_writer",
+              "filename": "research/ARCHITECTURE.md"
+            },
+            "class": "file_writer",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"file_writer\" style=\"border-left-color:#06b6d4\"><div class=\"node-title\">Save: Architecture</div><div class=\"node-subtitle\">file_writer</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "4",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 376,
+            "pos_y": 437
+          },
+          "17": {
+            "id": 17,
+            "name": "file_writer",
+            "data": {
+              "name": "Save: Pitfalls",
+              "type_id": "file_writer",
+              "filename": "research/PITFALLS.md"
+            },
+            "class": "file_writer",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"file_writer\" style=\"border-left-color:#06b6d4\"><div class=\"node-title\">Save: Pitfalls</div><div class=\"node-subtitle\">file_writer</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "5",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 383,
+            "pos_y": 570
+          },
+          "18": {
+            "id": 18,
+            "name": "file_writer",
+            "data": {
+              "name": "Save: Summary",
+              "type_id": "file_writer",
+              "filename": "research/SUMMARY.md",
+              "context_priority": "P3 — low"
+            },
+            "class": "file_writer",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"file_writer\" style=\"border-left-color:#06b6d4\"><div class=\"node-title\">Save: Summary</div><div class=\"node-subtitle\">file_writer</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "6",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 820,
+            "pos_y": 351
+          },
+          "19": {
+            "id": 19,
+            "name": "agent",
+            "data": {
+              "name": "Depth Chooser",
+              "type_id": "agent",
+              "mode": "standard",
+              "model": "haiku",
+              "expert": "question-asker",
+              "prompt": "Ask the user:\n\nQuestion: \"What level of planning depth would you like?\"\nOptions:\n- Quick: 3-5 focused questions for a fast planning session\n- Deep: 10-15 thorough questions for comprehensive planning",
+              "interactive": true,
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"agent\" style=\"border-left-color:#3b82f6\"><div class=\"node-title\">Agent</div><div class=\"node-subtitle\">unconfigured</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": []
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "20",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": -512,
+            "pos_y": 342
+          },
+          "20": {
+            "id": 20,
+            "name": "conditional",
+            "data": {
+              "name": "Conditional",
+              "type_id": "conditional",
+              "condition_type": "contains",
+              "condition_value": "deep",
+              "case_sensitive": false
+            },
+            "class": "conditional",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"conditional\" style=\"border-left-color:#eab308\"><div class=\"node-title\">Conditional</div><div class=\"node-subtitle\">unconfigured</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "19",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "21",
+                    "output": "input_1"
+                  }
+                ]
+              },
+              "output_2": {
+                "connections": [
+                  {
+                    "node": "1",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": -226,
+            "pos_y": 360
+          },
+          "21": {
+            "id": 21,
+            "name": "agent",
+            "data": {
+              "name": "Interview Deep",
+              "type_id": "agent",
+              "mode": "template",
+              "model": "opus",
+              "prompt": "",
+              "interactive": true,
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "expert_id": "29369d0d83af5f6fa55fd82044b33df0",
+              "expert": "interviewer",
+              "template": "DEEP_INTERVIEW",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "<div class=\"pipeline-node\" data-tooltip=\"agent\" style=\"border-left-color:#3b82f6\"><div class=\"node-title\">Agent</div><div class=\"node-subtitle\">unconfigured</div></div>",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "20",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "2",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "3",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "4",
+                    "output": "input_1"
+                  },
+                  {
+                    "node": "5",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 48,
+            "pos_y": 389
+          }
+        }
+      }
+    }
+  },
+  "is_default": true
+}
