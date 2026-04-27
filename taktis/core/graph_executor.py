@@ -22,6 +22,8 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from datetime import datetime, timezone
+
 from taktis import repository as repo
 from taktis.core.events import (
     EVENT_PHASE_COMPLETED,
@@ -38,6 +40,22 @@ from taktis.core.node_types import get_node_type
 from taktis.exceptions import PipelineError, SchedulerError
 
 logger = logging.getLogger(__name__)
+
+
+def _substitute_filename_placeholders(filename: str) -> str:
+    """Replace `{{date}}` / `{{datetime}}` / `{{week_num}}` / `{{year}}` in a
+    file_writer filename so cron-friendly templates produce dated paths.
+    """
+    if "{{" not in filename:
+        return filename
+    now = datetime.now(timezone.utc)
+    return (
+        filename
+        .replace("{{date}}", now.strftime("%Y-%m-%d"))
+        .replace("{{datetime}}", now.strftime("%Y-%m-%dT%H-%M"))
+        .replace("{{week_num}}", f"{now.isocalendar().week:02d}")
+        .replace("{{year}}", now.strftime("%Y"))
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -828,10 +846,20 @@ class GraphExecutor:
         return phase_failed
 
     def _get_written_file_path(self, node: GraphNode) -> str | None:
-        """Return the .taktis/-relative path for a file_writer node's output."""
+        """Return the .taktis/-relative path for a file_writer node's output.
+
+        Substitutes a small set of time placeholders so cron-friendly
+        templates can produce dated filenames without help from the
+        agent prompt:
+
+        - ``{{date}}``      → ``YYYY-MM-DD`` (UTC)
+        - ``{{datetime}}``  → ``YYYY-MM-DDTHH-MM`` (UTC, ``:`` swapped for ``-``)
+        - ``{{week_num}}``  → ISO week number, zero-padded
+        - ``{{year}}``      → ``YYYY``
+        """
         filename = node.data.get("filename", "").strip()
         if filename:
-            return filename
+            return _substitute_filename_placeholders(filename)
         # Legacy support for old file_target field
         file_target = node.data.get("file_target", "")
         if file_target == "requirements":
@@ -2118,8 +2146,12 @@ class GraphExecutor:
             logger.warning("API Call '%s': %s", node.name, exc)
             return
 
-        # Parse headers, then substitute env vars in each value
-        headers_raw = node.data.get("headers", "{}")
+        # Parse headers, then substitute env vars in each value.
+        # An empty string (the designer's default for "no headers") must
+        # be treated the same as a missing key — `dict.get(k, default)`
+        # only falls back when the key is absent, not when it is present
+        # with a falsy value, so use `or "{}"` to cover both.
+        headers_raw = node.data.get("headers") or "{}"
         try:
             headers = json.loads(headers_raw) if isinstance(headers_raw, str) else headers_raw
             if not isinstance(headers, dict):

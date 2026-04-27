@@ -370,9 +370,18 @@ Write upstream result to disk. Instant.
 
 | Field | Notes |
 |-------|-------|
-| filename | Path under `.taktis/` (e.g. `"research/STACK.md"`) |
+| filename | Path under `.taktis/`. Supports time placeholders (see below). E.g. `"research/STACK.md"` or `"briefings/{{date}}.md"`. |
 | source_section | Extract named section from upstream output_parser (empty = full text) |
 | context_priority | `"none"`, `"P0 — must include"`, `"P1 — high"`, `"P2 — medium"`, `"P3 — low"`, `"P4 — trim first"` |
+
+**Time placeholders** in `filename` are substituted at write time (UTC):
+
+| Placeholder | Expands to | Example |
+|---|---|---|
+| `{{date}}` | `YYYY-MM-DD` | `2026-04-27` |
+| `{{datetime}}` | `YYYY-MM-DDTHH-MM` | `2026-04-27T19-25` |
+| `{{week_num}}` | ISO week number, zero-padded | `18` |
+| `{{year}}` | `YYYY` | `2026` |
 
 **When to use:** Use file_writer to persist any important result to disk. Files are written to the project's `.taktis/` directory. Set `context_priority` to make the file available to downstream phases in multi-phase pipelines (P0 = always included, P4 = included if budget allows, "none" = not injected as context). Use `source_section` to extract a specific section from an upstream output_parser instead of writing the full text. Every pipeline should end with at least one file_writer to save its final output.
 

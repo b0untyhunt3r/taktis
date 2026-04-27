@@ -154,7 +154,10 @@ register_node_type(NodeType(
     config_schema=[
         ConfigField("filename", "Filename", "text",
                     required=True, default="",
-                    hint="Path under .taktis/ — e.g. 'REQUIREMENTS.md' or 'research/STACK.md'"),
+                    hint="Path under .taktis/ — e.g. 'REQUIREMENTS.md' or 'research/STACK.md'. "
+                         "Supports time placeholders for dated outputs: {{date}} (YYYY-MM-DD, UTC), "
+                         "{{datetime}} (YYYY-MM-DDTHH-MM, UTC), {{week_num}} (ISO week, zero-padded), "
+                         "{{year}}. Substituted at write time. Example: 'briefings/{{date}}.md'."),
         ConfigField("source_section", "Source Section", "text",
                     required=False, default="",
                     hint="Extract a named key from an upstream Output Parser (e.g. 'requirements'). Leave empty to write the full upstream text."),
