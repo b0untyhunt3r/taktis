@@ -2557,6 +2557,23 @@
     if (!project) { toast('Select a project', 'error'); return; }
     const flow = editor.export();
     const templateName = document.getElementById('template-name').value.trim() || 'Custom Flow';
+    // Disable the Execute button so the click registers visually even if
+    // the network is slow — without this the button looks unresponsive.
+    const btn = document.querySelector('#run-modal .btn-primary');
+    let originalLabel = '';
+    if (btn) {
+      originalLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Starting…';
+      btn.style.cursor = 'wait';
+    }
+    function restoreBtn() {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = originalLabel || 'Execute';
+        btn.style.cursor = '';
+      }
+    }
     fetch('/api/projects/' + encodeURIComponent(project) + '/execute-flow', {
       method: 'POST',
       headers: {
@@ -2571,14 +2588,14 @@
     })
     .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
     .then(function(res) {
-      if (!res.ok) { toast(res.data.error || 'Execution failed', 'error'); return; }
+      if (!res.ok) { restoreBtn(); toast(res.data.error || 'Execution failed', 'error'); return; }
       toast('Flow started! Redirecting...');
       window.closeRunModal();
       setTimeout(function() {
         window.location.href = '/projects/' + encodeURIComponent(project);
       }, 1000);
     })
-    .catch(function(e) { toast('Execute failed: ' + e.message, 'error'); });
+    .catch(function(e) { restoreBtn(); toast('Execute failed: ' + e.message, 'error'); });
   };
 
   // Close modal on overlay click

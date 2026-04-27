@@ -2,6 +2,32 @@
 {% block title %}Schedules — Taktis{% endblock %}
 
 {% block content %}
+<style>
+  /* Run Now click feedback: while htmx is in flight, swap the label and dim
+     the button so the click clearly registers even if the request is slow. */
+  .run-now-btn.htmx-request { opacity: 0.6; cursor: wait; }
+  .run-now-btn.htmx-request::after { content: ' …'; }
+  .run-now-btn[disabled] { opacity: 0.6; cursor: wait; }
+  /* "Running" badge shown in place of Run Now while a trigger is in flight. */
+  .badge-running {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: var(--radius);
+    background: rgba(59,130,246,0.12);
+    color: var(--accent);
+    border: 1px solid rgba(59,130,246,0.35);
+    font-size: 0.78rem; font-weight: 600;
+  }
+  .run-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    animation: pulse-run-dot 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse-run-dot {
+    0%, 100% { opacity: 0.4; transform: scale(0.85); }
+    50%      { opacity: 1;   transform: scale(1.1); }
+  }
+</style>
 <nav class="breadcrumb">
   <a href="/">Dashboard</a> <span class="sep">/</span>
   <span class="current">Schedules</span>
@@ -146,13 +172,20 @@
         </td>
         <td style="white-space:nowrap;">
           <span id="run-{{ s.id }}" style="display:inline;">
-            <button class="btn btn-sm"
-                    hx-post="/api/schedules/{{ s.id }}/run-now"
-                    hx-swap="innerHTML"
-                    hx-target="#run-{{ s.id }}"
-                    style="margin-right:0.25rem;">
-              Run Now
-            </button>
+            {% if s.is_running %}
+              <span class="badge badge-running" title="A pipeline run for this schedule is in progress">
+                <span class="run-dot"></span>Running&hellip;
+              </span>
+            {% else %}
+              <button class="btn btn-sm run-now-btn"
+                      hx-post="/api/schedules/{{ s.id }}/run-now"
+                      hx-swap="innerHTML"
+                      hx-target="#run-{{ s.id }}"
+                      hx-disabled-elt="this"
+                      style="margin-right:0.25rem;">
+                Run Now
+              </button>
+            {% endif %}
           </span>
           <button class="btn btn-sm btn-danger"
                   hx-delete="/api/schedules/{{ s.id }}"

@@ -3259,16 +3259,31 @@ async def api_execute_flow(request: Request) -> JSONResponse:
     if not flow_json:
         return JSONResponse({"error": "No flow_json or template_id provided"}, status_code=400)
 
-    try:
-        result = await o.execute_flow(
-            project_name, flow_json, template_name=template_name,
-        )
-    except (ValueError, TaktisError) as exc:
-        return JSONResponse({"error": format_error_for_user(exc)}, status_code=400)
+    # Validate the project exists synchronously so the caller gets a 400
+    # instead of a silent background failure.
+    project = await o.get_project(project_name)
+    if project is None:
+        return JSONResponse({"error": f"Project '{project_name}' not found"}, status_code=404)
 
-    if isinstance(result, list):
-        return JSONResponse({"phase_ids": result, "phase_id": result[0] if result else None})
-    return JSONResponse({"phase_id": result})
+    # Fire-and-forget: awaiting execute_flow blocks until the entire
+    # pipeline finishes (potentially many minutes), making the Execute
+    # button look unresponsive. Background errors get logged.
+    import asyncio as _asyncio
+    _task = _asyncio.create_task(
+        o.execute_flow(project_name, flow_json, template_name=template_name),
+        name=f"flow-{project_name}",
+    )
+    def _on_done(t):
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc:
+            logger.error(
+                "Flow execution failed for '%s': %s",
+                project_name, exc, exc_info=exc,
+            )
+    _task.add_done_callback(_on_done)
+    return JSONResponse({"status": "started"})
 
 
 # ======================================================================
@@ -3283,6 +3298,13 @@ async def page_schedules(request: Request):
         schedules = await repo.list_schedules(conn)
         pipeline_templates = await repo.list_pipeline_templates(conn)
     projects = await o.list_projects()
+    # Mark which schedules are mid-run so the template can replace the
+    # Run Now button with a Running indicator until execution finishes.
+    cron = o._cron_scheduler
+    schedules = [
+        {**s, "is_running": cron.is_schedule_running(s["id"])}
+        for s in schedules
+    ]
     return templates.TemplateResponse(
         "schedules.html",
         {
@@ -3383,7 +3405,13 @@ async def api_delete_schedule(request: Request):
 
 
 async def api_run_schedule_now(request: Request):
-    """POST /api/schedules/{id}/run-now -- manually trigger a schedule."""
+    """POST /api/schedules/{id}/run-now -- manually trigger a schedule.
+
+    Fires the trigger as a background task so the HTTP response returns
+    immediately. Awaiting the trigger would block for the full pipeline
+    duration (potentially minutes), making the Run Now button appear
+    unresponsive.
+    """
     o = _orch()
     schedule_id = request.path_params["id"]
     session_factory = o._execution_service._session_factory
@@ -3392,7 +3420,25 @@ async def api_run_schedule_now(request: Request):
     if not schedule:
         return JSONResponse({"error": "Not found"}, status_code=404)
     from datetime import datetime as dt, timezone as tz
-    await o._cron_scheduler._trigger(schedule, dt.now(tz.utc))
+    import asyncio as _asyncio
+    # Mark the schedule as running synchronously so an immediate page refresh
+    # sees "Running…" — without this there's a race window between
+    # create_task() and the trigger actually starting.
+    o._cron_scheduler._running_schedule_ids.add(schedule_id)
+    _task = _asyncio.create_task(
+        o._cron_scheduler._trigger(schedule, dt.now(tz.utc)),
+        name=f"manual-trigger-{schedule_id}",
+    )
+    def _on_done(t):
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc:
+            logger.error(
+                "Manual schedule trigger failed for '%s': %s",
+                schedule.get("name"), exc, exc_info=exc,
+            )
+    _task.add_done_callback(_on_done)
     if request.headers.get("HX-Request"):
         return HTMLResponse('<span class="text-success" style="color:var(--success);">Triggered</span>')
     return JSONResponse({"status": "triggered"})

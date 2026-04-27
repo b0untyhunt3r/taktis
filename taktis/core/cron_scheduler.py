@@ -46,6 +46,14 @@ class CronScheduler:
         self._session_factory = session_factory
         self._task: asyncio.Task | None = None
         self._running = False
+        # Schedule IDs whose pipeline is currently executing (cron-fired or
+        # manual Run Now). Lets the schedules page render a "Running" state
+        # instead of a Run Now button while a trigger is in flight.
+        self._running_schedule_ids: set[str] = set()
+
+    def is_schedule_running(self, schedule_id: str) -> bool:
+        """Return True if a trigger for this schedule is currently executing."""
+        return schedule_id in self._running_schedule_ids
 
     async def start(self) -> None:
         self._running = True
@@ -159,6 +167,7 @@ class CronScheduler:
             schedule.get("name"), project_name, template_id,
         )
 
+        self._running_schedule_ids.add(schedule_id)
         try:
             # Load template
             async with self._session_factory() as conn:
@@ -188,7 +197,6 @@ class CronScheduler:
                 else template["flow_json"]
             )
 
-            # Execute (fire and forget -- execute_flow runs in background)
             await self._orch.execute_flow(
                 project_name, flow_json,
                 template_name=template.get("name", "Scheduled"),
@@ -212,3 +220,5 @@ class CronScheduler:
                     )
             except Exception:
                 pass
+        finally:
+            self._running_schedule_ids.discard(schedule_id)
