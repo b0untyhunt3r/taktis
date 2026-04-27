@@ -1,0 +1,323 @@
+{
+  "name": "World News Briefing",
+  "description": "Scheduled morning briefing. Pulls Hacker News (Algolia API, with points) and four major world-news RSS feeds (BBC, Al Jazeera, The Guardian, NPR) in parallel, then asks an analytics-reporter persona to pick the 10 most popular and consequential headlines across all sources and write a dated briefing to news-briefings/. Headless and cron-safe — schedule it for 7am to read with coffee.",
+  "is_default": true,
+  "flow_json": {
+    "drawflow": {
+      "Briefing": {
+        "data": {
+          "1": {
+            "id": 1,
+            "name": "phase_settings",
+            "data": {
+              "type_id": "phase_settings",
+              "name": "Phase Settings",
+              "phase_name": "Briefing",
+              "phase_goal": "Pull headlines from Hacker News and four major world-news RSS feeds, pick the top 10 by popularity and consequence, and write a dated briefing.",
+              "success_criteria": "All five sources fetched\nTop 10 headlines selected with source attribution\nDated briefing written to news-briefings/",
+              "context_files": ""
+            },
+            "class": "phase_settings",
+            "html": "",
+            "typenode": false,
+            "inputs": {},
+            "outputs": {},
+            "pos_x": 50,
+            "pos_y": 50
+          },
+          "2": {
+            "id": 2,
+            "name": "api_call",
+            "data": {
+              "type_id": "api_call",
+              "name": "Hacker News (front page)",
+              "url": "https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=20",
+              "method": "GET",
+              "headers": "",
+              "body_template": ""
+            },
+            "class": "api_call",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": []
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "7",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 50,
+            "pos_y": 200
+          },
+          "3": {
+            "id": 3,
+            "name": "api_call",
+            "data": {
+              "type_id": "api_call",
+              "name": "BBC World",
+              "url": "http://feeds.bbci.co.uk/news/world/rss.xml",
+              "method": "GET",
+              "headers": "",
+              "body_template": ""
+            },
+            "class": "api_call",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": []
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "7",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 50,
+            "pos_y": 340
+          },
+          "4": {
+            "id": 4,
+            "name": "api_call",
+            "data": {
+              "type_id": "api_call",
+              "name": "Al Jazeera English",
+              "url": "https://www.aljazeera.com/xml/rss/all.xml",
+              "method": "GET",
+              "headers": "",
+              "body_template": ""
+            },
+            "class": "api_call",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": []
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "7",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 50,
+            "pos_y": 480
+          },
+          "5": {
+            "id": 5,
+            "name": "api_call",
+            "data": {
+              "type_id": "api_call",
+              "name": "The Guardian (World)",
+              "url": "https://www.theguardian.com/world/rss",
+              "method": "GET",
+              "headers": "",
+              "body_template": ""
+            },
+            "class": "api_call",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": []
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "7",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 50,
+            "pos_y": 620
+          },
+          "6": {
+            "id": 6,
+            "name": "api_call",
+            "data": {
+              "type_id": "api_call",
+              "name": "NPR News",
+              "url": "https://feeds.npr.org/1001/rss.xml",
+              "method": "GET",
+              "headers": "",
+              "body_template": ""
+            },
+            "class": "api_call",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": []
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "7",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 50,
+            "pos_y": 760
+          },
+          "7": {
+            "id": 7,
+            "name": "aggregator",
+            "data": {
+              "type_id": "aggregator",
+              "name": "Combine all feeds",
+              "mode": "concat",
+              "separator": "\n\n===== SOURCE BOUNDARY =====\n\n",
+              "header": "# Raw feeds (Hacker News + 4 RSS sources)\n\nEach section below is a separate source. Hacker News is JSON with a 'hits' array (each hit has title, url, points, num_comments). The other four are RSS XML — extract <item><title> and <item><link> from each.\n"
+            },
+            "class": "aggregator",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "2",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "3",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "4",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "5",
+                    "input": "output_1"
+                  },
+                  {
+                    "node": "6",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "8",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 380,
+            "pos_y": 480
+          },
+          "8": {
+            "id": 8,
+            "name": "agent",
+            "data": {
+              "type_id": "agent",
+              "name": "Curate top 10 + write briefing",
+              "mode": "standard",
+              "model": "sonnet",
+              "expert": "analytics-reporter",
+              "prompt": "You are preparing a single morning news briefing for one reader. Five raw feeds are provided in your context, separated by '===== SOURCE BOUNDARY ====='. The first is the Hacker News Algolia JSON (front page, 20 hits with points/num_comments). The remaining four are RSS XML from BBC World, Al Jazeera English, The Guardian (World), and NPR News.\n\nDo NOT fetch any URL or modify any file. Do not use Bash, Edit, Write, or WebFetch. Read the feeds from context only and produce text.\n\nPROCEDURE\n1. Parse each source. From Hacker News, extract title, url, points, num_comments. From each RSS XML, extract <item><title> and <item><link> in feed order (top of feed = higher editorial weight).\n2. Deduplicate across sources — if the same story appears in two outlets (similar headline or same external URL), treat it as ONE story and note both sources.\n3. Rank candidates and pick exactly 10. Use this rule:\n   - Hacker News stories rank by points (a 1000+ point story is unambiguously top-tier).\n   - World-news stories rank by feed position (1-3 are headline picks) plus cross-source presence (a story carried by 2+ of the four world feeds outranks a story carried by 1).\n   - Aim for a balanced briefing: roughly 4-5 tech/HN stories and 5-6 world-news stories, but adjust if one bucket has nothing genuinely consequential today.\n4. Write the briefing in the format below. Be terse. Headlines verbatim (do not re-write them). One short context line per item — what makes it consequential or interesting, not a rehash of the headline. No editorialising beyond the brief framing.\n\nOUTPUT FORMAT (markdown, exactly this shape)\n\n# World News Briefing — {{date}}\n\n10 headlines from Hacker News and four major world-news outlets, ranked by popularity and editorial weight.\n\n## Top stories\n\n### 1. <Headline verbatim>\n**Source:** <Hacker News · 1,234 points · 567 comments>  *or*  <BBC World · also in The Guardian>\n**Why it's here:** <one sentence — what's at stake, who's affected, why it cleared the bar today>\n[Link](<url>)\n\n### 2. <Headline verbatim>\n... (same shape)\n\n### 3. ...\n\n(continue through 10)\n\n## What didn't make the cut\nOne short paragraph (3-5 sentences) on the most notable stories that ranked 11–15 — acknowledged but not promoted. Mention by name; no full treatment.\n\nKeep the entire briefing under 700 words. Do not add a header or footer beyond what is specified.",
+              "interactive": false,
+              "template": "",
+              "variable_map": "{}",
+              "inject_expert_options": false,
+              "inject_description": true,
+              "retry_on_pattern": "",
+              "max_retries": "0",
+              "retry_revision_template": "",
+              "retry_revision_prompt": "",
+              "retry_transient": true,
+              "retry_max_attempts": "2",
+              "retry_backoff": "exponential"
+            },
+            "class": "agent",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "7",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": [
+                  {
+                    "node": "9",
+                    "output": "input_1"
+                  }
+                ]
+              }
+            },
+            "pos_x": 720,
+            "pos_y": 480
+          },
+          "9": {
+            "id": 9,
+            "name": "file_writer",
+            "data": {
+              "type_id": "file_writer",
+              "name": "Save dated briefing",
+              "filename": "news-briefings/{{date}}.md",
+              "priority": "P1"
+            },
+            "class": "file_writer",
+            "html": "",
+            "typenode": false,
+            "inputs": {
+              "input_1": {
+                "connections": [
+                  {
+                    "node": "8",
+                    "input": "output_1"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "output_1": {
+                "connections": []
+              }
+            },
+            "pos_x": 1040,
+            "pos_y": 480
+          }
+        }
+      }
+    }
+  }
+}

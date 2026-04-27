@@ -234,7 +234,7 @@ Schedule it weekly. An `api_call` fetches Hacker News' RSS, a `historian` person
 
 ---
 
-These four are the curated set. Another also ships out of the box — **Recursive Argument Engine** ([`taktis/defaults/pipeline_templates/recursive-argument-engine.json`](taktis/defaults/pipeline_templates/recursive-argument-engine.json)) — and 20+ more scheduled-pipeline recipes ready to fork live in [`docs/vault/Recipes.md`](docs/vault/Recipes.md).
+These four are the curated set. Two more also ship out of the box — **Recursive Argument Engine** ([`taktis/defaults/pipeline_templates/recursive-argument-engine.json`](taktis/defaults/pipeline_templates/recursive-argument-engine.json)) and **World News Briefing** ([`taktis/defaults/pipeline_templates/world-news-briefing.json`](taktis/defaults/pipeline_templates/world-news-briefing.json)) — plus 20+ scheduled-pipeline recipes ready to fork in [`docs/vault/Recipes.md`](docs/vault/Recipes.md).
 
 ---
 
