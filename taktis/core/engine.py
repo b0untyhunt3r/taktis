@@ -92,6 +92,17 @@ class Taktis:
         self.agent_template_registry = AgentTemplateRegistry(db_session_factory=get_session)
         await self.agent_template_registry.load_builtins()
 
+        # Seed the Hello Taktis demo project on a fresh install (no-op if any
+        # project already exists, so deletion is permanent).  Runs here because
+        # it depends on the experts table being populated.
+        try:
+            from taktis.defaults.demo_project import seed_demo_project
+            async with get_session() as conn:
+                await seed_demo_project(conn)
+                await conn.commit()
+        except Exception as exc:
+            logger.debug("Skipping demo project seed: %s", exc)
+
         # --- Create internal services ---
         self._project_service = ProjectService(
             db_session_factory=get_session,
