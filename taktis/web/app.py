@@ -238,6 +238,11 @@ async def page_project_detail(request: Request) -> HTMLResponse:
     pending_gate = None
     project_id = project.get("id", "")
     executor = o._active_flow_executors.get(project_id)
+    # Signals to the template's catch-up reload loop that a pipeline is
+    # actively creating phases — without it, an empty project (no pipeline
+    # selected at creation) would reload forever waiting for phases that
+    # will never appear.
+    pipeline_active = executor is not None
     if executor is not None:
         if getattr(executor, "_pending_plan", None) is not None:
             pending_plan_approval = True
@@ -265,6 +270,7 @@ async def page_project_detail(request: Request) -> HTMLResponse:
             "active_page": "projects",
             "pending_plan_approval": pending_plan_approval,
             "pending_gate": pending_gate,
+            "pipeline_active": pipeline_active,
             "ctx_windows": MODEL_CONTEXT_WINDOWS,
         },
     )

@@ -89,6 +89,14 @@
   // Catch-up: if an in_progress phase has 0 task rows or no phases exist yet,
   // the pipeline hasn't created them before the page loaded. Retry with
   // increasing delays until tasks appear or we give up.
+  //
+  // Gated by `pipelineActive` (executor exists for this project) so an idle
+  // project with no pipeline selected at creation time doesn't loop-reload
+  // forever waiting for phases that will never appear. SessionStorage caps
+  // total reloads to keep us from looping if a pipeline stays stuck.
+  var _pipelineActive = {{ pipeline_active | tojson }};
+  var _catchupKey = 'catchup_reloads_' + {{ project.name | tojson }};
+  var _catchupReloads = parseInt(sessionStorage.getItem(_catchupKey) || '0', 10);
   var _catchupAttempt = 0;
   var _catchupDelays = [800, 1500, 2500, 4000];
   function _catchupCheck() {
@@ -110,14 +118,20 @@
         }
       }
     });
-    // No phases at all but project exists — pipeline hasn't created phase yet
-    if (tbodies.length === 0) {
+    // No phases at all but project exists — pipeline hasn't created phase yet.
+    // Only loop if a pipeline is actually starting; otherwise this is just an
+    // empty project (e.g. created without a pipeline template).
+    if (tbodies.length === 0 && _pipelineActive) {
       needsReload = true;
     }
     if (needsReload) {
+      if (_catchupReloads >= 4) return;  // hard cap across reloads
+      sessionStorage.setItem(_catchupKey, String(_catchupReloads + 1));
       location.reload();
       return;
     }
+    // Reached a stable state — clear the reload counter for next time.
+    sessionStorage.removeItem(_catchupKey);
     _catchupAttempt++;
     if (_catchupAttempt < _catchupDelays.length) {
       setTimeout(_catchupCheck, _catchupDelays[_catchupAttempt]);
