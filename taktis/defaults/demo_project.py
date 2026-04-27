@@ -28,14 +28,12 @@ SCHEDULE_NAME = "Daily news briefing — 10:00 UTC"
 SCHEDULE_TIME = "10:00"  # UTC; the cron scheduler operates in UTC.
 
 _DESCRIPTION = (
-    "Pre-wired starter project. A daily schedule runs the World News "
-    "Briefing pipeline at 10:00 UTC, pulling Hacker News and four world-"
-    "news RSS feeds (BBC, Al Jazeera, The Guardian, NPR) and producing a "
-    "top-10 briefing under .taktis/news-briefings/. Set ANTHROPIC_API_KEY "
-    "(or run `claude login`) and the next 10:00 UTC tick will start "
-    "producing briefings; click 'Run Now' on /schedules to trigger one "
-    "immediately. Retime or disable the schedule on /schedules; delete "
-    "this project at any time and it will not be re-created."
+    "Starter project. Every day at 10:00 UTC a schedule runs the World "
+    "News Briefing pipeline — it pulls Hacker News plus BBC, Al Jazeera, "
+    "The Guardian and NPR, picks the top 10 stories, and writes a dated "
+    "briefing under .taktis/news-briefings/. Trigger one now from "
+    "/schedules → Run Now, or retime/disable the schedule there. Delete "
+    "this project any time; it won't be re-created."
 )
 
 

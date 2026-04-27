@@ -30,6 +30,9 @@
   <span class="current">{{ project.name }}</span>
 </nav>
 <h1>{{ project.name }}</h1>
+{% if project.description %}
+<p class="text-muted" style="margin: -0.4rem 0 1rem; line-height: 1.5; max-width: 70ch;">{{ project.description }}</p>
+{% endif %}
 
 <!-- SSE connection for live status updates (vanilla JS) -->
 <script>
