@@ -49,12 +49,21 @@
     <div class="form-group">
       <label for="pipeline_template">Pipeline Template</label>
       <select id="pipeline_template" name="pipeline_template" onchange="onPipelineTemplateChange()">
-        <option value="">None</option>
+        <option value="" data-description="Skip the pipeline — create an empty project and add phases manually later.">None</option>
         {% for tmpl in pipeline_templates %}
-        <option value="{{ tmpl.id }}" data-required-env-vars='{{ (tmpl.required_env_vars or []) | tojson }}'>{{ tmpl.name }}</option>
+        <option value="{{ tmpl.id }}"
+                data-required-env-vars='{{ (tmpl.required_env_vars or []) | tojson }}'
+                data-description="{{ tmpl.description or '' }}"
+                {% if tmpl.name == "Project Planner" %}selected{% endif %}>{{ tmpl.name }}</option>
         {% endfor %}
       </select>
-      <small style="color:var(--text-muted); display:block; margin-top:0.25rem;">
+      <div id="pipeline-template-description"
+           style="margin-top:0.5rem; padding:0.6rem 0.75rem; background:var(--bg-elevated);
+                  border-left:3px solid var(--accent); border-radius:var(--radius);
+                  font-size:0.82rem; color:var(--text-muted); line-height:1.5;
+                  display:none;">
+      </div>
+      <small style="color:var(--text-muted); display:block; margin-top:0.4rem;">
         Choose a pipeline to run on project creation. <a href="/pipelines">Edit templates</a>
       </small>
     </div>
@@ -123,8 +132,18 @@ function onPipelineTemplateChange() {
   const sel = document.getElementById('pipeline_template');
   const wrap = document.getElementById('required-env-vars');
   const rowsEl = document.getElementById('required-env-vars-rows');
-  if (!sel.value) { wrap.style.display = 'none'; rowsEl.innerHTML = ''; return; }
   const opt = sel.options[sel.selectedIndex];
+
+  // Show the selected template's description (or the "None" copy) so the
+  // user knows what the pipeline does before committing.
+  const descBox = document.getElementById('pipeline-template-description');
+  const descText = (opt && opt.dataset.description) ? opt.dataset.description.trim() : '';
+  if (descBox) {
+    if (descText) { descBox.textContent = descText; descBox.style.display = ''; }
+    else { descBox.textContent = ''; descBox.style.display = 'none'; }
+  }
+
+  if (!sel.value) { wrap.style.display = 'none'; rowsEl.innerHTML = ''; return; }
   let vars = [];
   try { vars = JSON.parse(opt.dataset.requiredEnvVars || '[]'); } catch { vars = []; }
   if (!vars.length) { wrap.style.display = 'none'; rowsEl.innerHTML = ''; return; }
@@ -153,6 +172,10 @@ function getFormContext() {
     pipeline_template: tmplName,
   };
 }
+
+// Sync any required-env-var rows with the pre-selected default template
+// (Project Planner) so the form shows correctly on first load.
+onPipelineTemplateChange();
 
 initAdvisor('project', null, {
   contextDataFn: getFormContext
