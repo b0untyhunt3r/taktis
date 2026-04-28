@@ -808,6 +808,30 @@ def write_task_context_file(
 # Async wrappers — prevent blocking the event loop on slow filesystems
 # ------------------------------------------------------------------
 
+def cleanup_task_context_file(working_dir: str, task_id: str) -> None:
+    """Remove ``.taktis/TASK_CONTEXT_{task_id}.md`` once a task has finished.
+
+    The TASK_CONTEXT file is a per-task scratch artifact: graph_executor
+    writes upstream results into it at task-create time so the agent can
+    Read it. After completion, the same content is preserved in
+    ``RESULT_{task_id}.md`` (and the agent's response is in the DB), so the
+    scratch file is just cruft. Idempotent — safe to call when the file
+    never existed or was already removed.
+    """
+    if not task_id:
+        return
+    path = _ctx_dir(working_dir) / f"TASK_CONTEXT_{task_id}.md"
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.debug("Could not remove %s: %s", path, exc)
+
+
+async def async_cleanup_task_context_file(working_dir: str, task_id: str) -> None:
+    """Non-blocking version of :func:`cleanup_task_context_file`."""
+    await asyncio.to_thread(cleanup_task_context_file, working_dir, task_id)
+
+
 async def async_write_task_result(
     working_dir: str,
     phase_number: int,

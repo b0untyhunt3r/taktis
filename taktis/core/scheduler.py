@@ -859,6 +859,12 @@ class WaveScheduler:
                     logger.exception("Failed to write context files for task %s", tid)
 
                 try:
+                    from taktis.core.context import async_cleanup_task_context_file
+                    await async_cleanup_task_context_file(working_dir, tid)
+                except Exception:
+                    logger.exception("Failed to clean up TASK_CONTEXT for task %s", tid)
+
+                try:
                     from taktis.core.context import apply_supersession_if_marked
                     await apply_supersession_if_marked(
                         working_dir, tid, phase_number, full_result,

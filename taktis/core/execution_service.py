@@ -536,6 +536,14 @@ class ExecutionService:
                         "Failed to write context files for interactive task %s", tid,
                     )
 
+                try:
+                    from taktis.core.context import async_cleanup_task_context_file
+                    await async_cleanup_task_context_file(working_dir_for_ctx, tid)
+                except Exception:
+                    logger.exception(
+                        "Failed to clean up TASK_CONTEXT for interactive task %s", tid,
+                    )
+
             if final_status == "completed" and full_result:
                 try:
                     phase_number_for_super: int | None = None
