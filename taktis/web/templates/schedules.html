@@ -187,6 +187,9 @@
               </button>
             {% endif %}
           </span>
+          <button class="btn btn-sm" type="button" onclick="toggleScheduleEdit('{{ s.id }}')" style="margin-right:0.25rem;">
+            Edit
+          </button>
           <button class="btn btn-sm btn-danger"
                   hx-delete="/api/schedules/{{ s.id }}"
                   hx-confirm="Delete schedule '{{ s.name }}'?"
@@ -194,6 +197,64 @@
                   hx-swap="outerHTML">
             Delete
           </button>
+        </td>
+      </tr>
+      <tr id="sched-edit-{{ s.id }}" class="sched-edit-row" style="display:none;">
+        <td colspan="9" style="background:var(--bg-elevated); padding:1rem;">
+          <form class="schedule-edit-form" data-schedule-id="{{ s.id }}">
+            <div class="form-row">
+              <div>
+                <label>Name</label>
+                <input type="text" name="name" required value="{{ s.name }}">
+              </div>
+              <div>
+                <label>Project</label>
+                <select name="project_name" required>
+                  {% for p in projects %}
+                  <option value="{{ p.name }}" {% if p.name == s.project_name %}selected{% endif %}>{{ p.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div>
+                <label>Pipeline Template</label>
+                <select name="template_id" required>
+                  {% for t in templates %}
+                  <option value="{{ t.id }}" {% if t.id == s.template_id %}selected{% endif %}>{{ t.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label>Frequency</label>
+                <select name="frequency" class="edit-frequency">
+                  <option value="hourly"  {% if s.frequency == 'hourly'  %}selected{% endif %}>Hourly</option>
+                  <option value="daily"   {% if s.frequency == 'daily'   %}selected{% endif %}>Daily</option>
+                  <option value="weekly"  {% if s.frequency == 'weekly'  %}selected{% endif %}>Weekly</option>
+                  <option value="monthly" {% if s.frequency == 'monthly' %}selected{% endif %}>Monthly</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="edit-time-row" {% if s.frequency == 'hourly' %}style="display:none;"{% endif %}>
+                <label>Time of Day (UTC)</label>
+                <input type="time" name="time_of_day" value="{{ s.time_of_day or '02:00' }}">
+              </div>
+              <div class="edit-day-row" {% if s.frequency != 'weekly' %}style="display:none;"{% endif %}>
+                <label>Day of Week</label>
+                <select name="day_of_week">
+                  {% for d in ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] %}
+                  <option value="{{ d }}" {% if (s.day_of_week or 'monday') == d %}selected{% endif %}>{{ d|capitalize }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="edit-error" style="display:none; margin:0.5rem 0; padding:0.5rem 0.75rem; border-radius:var(--radius); background:var(--danger-dim); color:var(--danger); font-size:0.82rem;"></div>
+            <div style="margin-top:0.75rem; display:flex; gap:0.5rem;">
+              <button type="submit" class="btn-success">Save</button>
+              <button type="button" class="btn" onclick="toggleScheduleEdit('{{ s.id }}')">Cancel</button>
+            </div>
+          </form>
         </td>
       </tr>
       {% endfor %}
@@ -212,6 +273,65 @@ document.getElementById('sched-frequency').addEventListener('change', function()
   var f = this.value;
   document.getElementById('time-row').style.display = (f === 'hourly') ? 'none' : '';
   document.getElementById('day-row').style.display = (f === 'weekly') ? '' : 'none';
+});
+
+// Edit-row toggle: only one open at a time, so opening another collapses
+// the previously open one.
+function toggleScheduleEdit(id) {
+  var row = document.getElementById('sched-edit-' + id);
+  if (!row) return;
+  var willOpen = row.style.display === 'none';
+  document.querySelectorAll('.sched-edit-row').forEach(function(r) {
+    r.style.display = 'none';
+  });
+  if (willOpen) row.style.display = '';
+}
+window.toggleScheduleEdit = toggleScheduleEdit;
+
+// Per-row frequency change: hide/show time and day fields like the create form.
+document.querySelectorAll('.schedule-edit-form').forEach(function(form) {
+  var freq = form.querySelector('.edit-frequency');
+  var timeRow = form.querySelector('.edit-time-row');
+  var dayRow = form.querySelector('.edit-day-row');
+  freq.addEventListener('change', function() {
+    timeRow.style.display = (freq.value === 'hourly') ? 'none' : '';
+    dayRow.style.display = (freq.value === 'weekly') ? '' : 'none';
+  });
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var errEl = form.querySelector('.edit-error');
+    errEl.style.display = 'none';
+    var fd = new FormData(form);
+    var body = {
+      name: fd.get('name'),
+      project_name: fd.get('project_name'),
+      template_id: fd.get('template_id'),
+      frequency: fd.get('frequency'),
+      time_of_day: fd.get('time_of_day') || '',
+      day_of_week: fd.get('day_of_week') || '',
+    };
+    var csrfMatch = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+    var headers = { 'Content-Type': 'application/json' };
+    if (csrfMatch) headers['X-CSRFToken'] = csrfMatch[1];
+    fetch('/api/schedules/' + form.dataset.scheduleId, {
+      method: 'PATCH',
+      headers: headers,
+      body: JSON.stringify(body),
+    })
+    .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+    .then(function(res) {
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        errEl.textContent = res.data.error || 'Failed to update schedule';
+        errEl.style.display = 'block';
+      }
+    })
+    .catch(function(err) {
+      errEl.textContent = 'Network error: ' + err.message;
+      errEl.style.display = 'block';
+    });
+  });
 });
 
 // Handle form submission via fetch (JSON body)

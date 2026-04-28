@@ -3374,6 +3374,72 @@ async def api_create_schedule(request: Request):
     return JSONResponse({"id": schedule_id, "status": "created"})
 
 
+async def api_update_schedule(request: Request):
+    """PATCH /api/schedules/{id} -- update a schedule's editable fields.
+
+    Accepts the same body shape as create (name, project_name, template_id,
+    frequency, time_of_day, day_of_week). Re-runs the interactive-node
+    validation when the template changes.
+    """
+    o = _orch()
+    schedule_id = request.path_params["id"]
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    session_factory = o._execution_service._session_factory
+    async with session_factory() as conn:
+        existing = await repo.get_schedule(conn, schedule_id)
+    if not existing:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+
+    updates: dict = {}
+    for k in ("name", "project_name", "template_id", "frequency", "time_of_day", "day_of_week"):
+        if k in body:
+            v = body[k]
+            if isinstance(v, str):
+                v = v.strip()
+            updates[k] = v
+
+    name = (updates.get("name") or existing["name"] or "").strip()
+    project_name = (updates.get("project_name") or existing["project_name"] or "").strip()
+    template_id = (updates.get("template_id") or existing["template_id"] or "").strip()
+    if not name or not project_name or not template_id:
+        return JSONResponse(
+            {"error": "Name, project, and pipeline template are required"},
+            status_code=400,
+        )
+
+    new_template = updates.get("template_id")
+    if new_template and new_template != existing["template_id"]:
+        from taktis.core.cron_scheduler import detect_interactive_nodes
+        async with session_factory() as conn:
+            pipeline_templates = await repo.list_pipeline_templates(conn)
+        tmpl = next((t for t in pipeline_templates if t["id"] == new_template), None)
+        if tmpl:
+            flow = (
+                json.loads(tmpl["flow_json"])
+                if isinstance(tmpl["flow_json"], str)
+                else tmpl["flow_json"]
+            )
+            interactive = detect_interactive_nodes(flow)
+            if interactive:
+                return JSONResponse(
+                    {
+                        "error": (
+                            "Pipeline has interactive nodes that can't run headless: "
+                            + ", ".join(interactive)
+                        )
+                    },
+                    status_code=400,
+                )
+
+    async with session_factory() as conn:
+        await repo.update_schedule(conn, schedule_id, **updates)
+    return JSONResponse({"id": schedule_id, "status": "updated"})
+
+
 async def api_toggle_schedule(request: Request):
     """POST /api/schedules/{id}/toggle -- enable/disable a schedule."""
     o = _orch()
@@ -3503,6 +3569,7 @@ def create_app() -> Starlette:
         Route("/api/schedules", api_create_schedule, methods=["POST"]),
         Route("/api/schedules/{id}/toggle", api_toggle_schedule, methods=["POST"]),
         Route("/api/schedules/{id}/run-now", api_run_schedule_now, methods=["POST"]),
+        Route("/api/schedules/{id}", api_update_schedule, methods=["PATCH"]),
         Route("/api/schedules/{id}", api_delete_schedule, methods=["DELETE"]),
         # Pipeline template routes
         Route("/pipelines", page_pipelines, methods=["GET"]),
