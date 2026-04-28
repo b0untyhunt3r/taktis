@@ -3334,6 +3334,13 @@ async def api_create_schedule(request: Request):
             status_code=400,
         )
 
+    # Validate: cron expression must be syntactically usable when frequency=cron.
+    if body.get("frequency") == "cron":
+        from taktis.core.cron_scheduler import validate_cron_expr
+        cron_err = validate_cron_expr(body.get("cron_expr") or "")
+        if cron_err:
+            return JSONResponse({"error": cron_err}, status_code=400)
+
     # Validate: check for interactive nodes
     session_factory = o._execution_service._session_factory
     from taktis.core.cron_scheduler import detect_interactive_nodes
@@ -3395,7 +3402,7 @@ async def api_update_schedule(request: Request):
         return JSONResponse({"error": "Not found"}, status_code=404)
 
     updates: dict = {}
-    for k in ("name", "project_name", "template_id", "frequency", "time_of_day", "day_of_week"):
+    for k in ("name", "project_name", "template_id", "frequency", "time_of_day", "day_of_week", "cron_expr"):
         if k in body:
             v = body[k]
             if isinstance(v, str):
@@ -3410,6 +3417,15 @@ async def api_update_schedule(request: Request):
             {"error": "Name, project, and pipeline template are required"},
             status_code=400,
         )
+
+    # If the resulting frequency is 'cron', the resulting cron_expr must validate.
+    effective_frequency = updates.get("frequency", existing.get("frequency"))
+    if effective_frequency == "cron":
+        from taktis.core.cron_scheduler import validate_cron_expr
+        effective_cron = updates.get("cron_expr", existing.get("cron_expr") or "")
+        cron_err = validate_cron_expr(effective_cron or "")
+        if cron_err:
+            return JSONResponse({"error": cron_err}, status_code=400)
 
     new_template = updates.get("template_id")
     if new_template and new_template != existing["template_id"]:

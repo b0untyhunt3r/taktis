@@ -71,6 +71,7 @@
           <option value="daily" selected>Daily</option>
           <option value="weekly">Weekly</option>
           <option value="monthly">Monthly</option>
+          <option value="cron">Advanced (cron)</option>
         </select>
       </div>
     </div>
@@ -90,6 +91,17 @@
           <option value="saturday">Saturday</option>
           <option value="sunday">Sunday</option>
         </select>
+      </div>
+      <div id="cron-row" style="display:none; flex:1;">
+        <label for="sched-cron">Cron Expression (UTC)</label>
+        <input type="text" id="sched-cron" name="cron_expr" placeholder="*/15 * * * *" autocomplete="off"
+               style="font-family:var(--mono);">
+        <small class="text-muted" style="display:block; margin-top:0.25rem; font-size:0.75rem; line-height:1.5;">
+          Standard 5-field cron: <code>min hour dom month dow</code>.
+          Examples: <code>0 9 * * 1-5</code> (9:00 weekdays),
+          <code>*/15 * * * *</code> (every 15 min),
+          <code>0 0 1 * *</code> (1st of month at 00:00).
+        </small>
       </div>
     </div>
     <button type="submit" class="btn-success" style="margin-top:0.5rem;">Create Schedule</button>
@@ -129,13 +141,19 @@
           {{ ns.tmpl_name }}
         </td>
         <td>
-          <span style="text-transform:capitalize;">{{ s.frequency }}</span>
-          {% if s.frequency == 'weekly' and s.day_of_week %}
-            <span class="text-muted" style="font-size:0.8em;">({{ s.day_of_week }})</span>
+          {% if s.frequency == 'cron' %}
+            <span class="badge badge-idle" title="Custom cron expression">Cron</span>
+          {% else %}
+            <span style="text-transform:capitalize;">{{ s.frequency }}</span>
+            {% if s.frequency == 'weekly' and s.day_of_week %}
+              <span class="text-muted" style="font-size:0.8em;">({{ s.day_of_week }})</span>
+            {% endif %}
           {% endif %}
         </td>
         <td>
-          {% if s.frequency != 'hourly' %}
+          {% if s.frequency == 'cron' %}
+            <code style="font-size:0.8rem;" title="Cron expression (UTC)">{{ s.cron_expr or '' }}</code>
+          {% elif s.frequency != 'hourly' %}
             {{ s.time_of_day or '00:00' }} UTC
           {% else %}
             Every hour
@@ -232,11 +250,12 @@
                   <option value="daily"   {% if s.frequency == 'daily'   %}selected{% endif %}>Daily</option>
                   <option value="weekly"  {% if s.frequency == 'weekly'  %}selected{% endif %}>Weekly</option>
                   <option value="monthly" {% if s.frequency == 'monthly' %}selected{% endif %}>Monthly</option>
+                  <option value="cron"    {% if s.frequency == 'cron'    %}selected{% endif %}>Advanced (cron)</option>
                 </select>
               </div>
             </div>
             <div class="form-row">
-              <div class="edit-time-row" {% if s.frequency == 'hourly' %}style="display:none;"{% endif %}>
+              <div class="edit-time-row" {% if s.frequency == 'hourly' or s.frequency == 'cron' %}style="display:none;"{% endif %}>
                 <label>Time of Day (UTC)</label>
                 <input type="time" name="time_of_day" value="{{ s.time_of_day or '02:00' }}">
               </div>
@@ -247,6 +266,14 @@
                   <option value="{{ d }}" {% if (s.day_of_week or 'monday') == d %}selected{% endif %}>{{ d|capitalize }}</option>
                   {% endfor %}
                 </select>
+              </div>
+              <div class="edit-cron-row" style="flex:1; {% if s.frequency != 'cron' %}display:none;{% endif %}">
+                <label>Cron Expression (UTC)</label>
+                <input type="text" name="cron_expr" placeholder="*/15 * * * *" autocomplete="off"
+                       value="{{ s.cron_expr or '' }}" style="font-family:var(--mono);">
+                <small class="text-muted" style="display:block; margin-top:0.25rem; font-size:0.75rem;">
+                  Standard 5-field: <code>min hour dom month dow</code>
+                </small>
               </div>
             </div>
             <div class="edit-error" style="display:none; margin:0.5rem 0; padding:0.5rem 0.75rem; border-radius:var(--radius); background:var(--danger-dim); color:var(--danger); font-size:0.82rem;"></div>
@@ -268,11 +295,12 @@
 {% endif %}
 
 <script>
-// Show/hide time and day fields based on frequency
+// Show/hide time, day, and cron fields based on frequency
 document.getElementById('sched-frequency').addEventListener('change', function() {
   var f = this.value;
-  document.getElementById('time-row').style.display = (f === 'hourly') ? 'none' : '';
+  document.getElementById('time-row').style.display = (f === 'hourly' || f === 'cron') ? 'none' : '';
   document.getElementById('day-row').style.display = (f === 'weekly') ? '' : 'none';
+  document.getElementById('cron-row').style.display = (f === 'cron') ? '' : 'none';
 });
 
 // Edit-row toggle: only one open at a time, so opening another collapses
@@ -288,14 +316,16 @@ function toggleScheduleEdit(id) {
 }
 window.toggleScheduleEdit = toggleScheduleEdit;
 
-// Per-row frequency change: hide/show time and day fields like the create form.
+// Per-row frequency change: hide/show time, day, and cron fields like the create form.
 document.querySelectorAll('.schedule-edit-form').forEach(function(form) {
   var freq = form.querySelector('.edit-frequency');
   var timeRow = form.querySelector('.edit-time-row');
   var dayRow = form.querySelector('.edit-day-row');
+  var cronRow = form.querySelector('.edit-cron-row');
   freq.addEventListener('change', function() {
-    timeRow.style.display = (freq.value === 'hourly') ? 'none' : '';
+    timeRow.style.display = (freq.value === 'hourly' || freq.value === 'cron') ? 'none' : '';
     dayRow.style.display = (freq.value === 'weekly') ? '' : 'none';
+    if (cronRow) cronRow.style.display = (freq.value === 'cron') ? '' : 'none';
   });
   form.addEventListener('submit', function(e) {
     e.preventDefault();
@@ -309,6 +339,7 @@ document.querySelectorAll('.schedule-edit-form').forEach(function(form) {
       frequency: fd.get('frequency'),
       time_of_day: fd.get('time_of_day') || '',
       day_of_week: fd.get('day_of_week') || '',
+      cron_expr: fd.get('cron_expr') || '',
     };
     var csrfMatch = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
     var headers = { 'Content-Type': 'application/json' };
@@ -347,6 +378,7 @@ document.getElementById('create-schedule-form').addEventListener('submit', funct
     frequency: document.getElementById('sched-frequency').value,
     time_of_day: document.getElementById('sched-time').value,
     day_of_week: document.getElementById('sched-day').value,
+    cron_expr: document.getElementById('sched-cron').value,
   };
 
   // Read CSRF token

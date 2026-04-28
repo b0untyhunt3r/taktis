@@ -11,6 +11,89 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _cron_field_matches(field: str, value: int, lo: int, hi: int) -> bool:
+    """Check if ``value`` matches a single cron field bounded to [lo, hi].
+
+    Accepts ``*``, comma lists, ranges (``a-b``), and steps (``*/n`` or
+    ``a-b/n``). Returns False on any unparseable token so a malformed
+    expression simply never fires (caller validates upfront).
+    """
+    field = field.strip()
+    for token in field.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        step = 1
+        if "/" in token:
+            base, _, step_s = token.partition("/")
+            try:
+                step = int(step_s)
+            except ValueError:
+                return False
+            if step < 1:
+                return False
+            token = base or "*"
+        if token == "*":
+            start, end = lo, hi
+        elif "-" in token:
+            a, _, b = token.partition("-")
+            try:
+                start, end = int(a), int(b)
+            except ValueError:
+                return False
+        else:
+            try:
+                start = end = int(token)
+            except ValueError:
+                return False
+        if start > end or end < lo or start > hi:
+            continue
+        if start <= value <= end and (value - start) % step == 0:
+            return True
+    return False
+
+
+def cron_matches(expr: str, dt: datetime) -> bool:
+    """Return True if ``dt`` (naive or tz-aware, minute precision) matches a
+    standard 5-field cron expression: ``minute hour day month weekday``.
+
+    Sunday accepts either ``0`` or ``7`` per common cron convention.
+    """
+    parts = expr.strip().split()
+    if len(parts) != 5:
+        return False
+    minute_f, hour_f, dom_f, month_f, dow_f = parts
+    # Python: Mon=0..Sun=6. Cron: Sun=0..Sat=6 (with 7 also = Sunday).
+    weekday_cron = (dt.weekday() + 1) % 7
+    dow_ok = _cron_field_matches(dow_f, weekday_cron, 0, 6)
+    if not dow_ok and weekday_cron == 0:
+        dow_ok = _cron_field_matches(dow_f, 7, 0, 7)
+    return (
+        _cron_field_matches(minute_f, dt.minute, 0, 59)
+        and _cron_field_matches(hour_f, dt.hour, 0, 23)
+        and _cron_field_matches(dom_f, dt.day, 1, 31)
+        and _cron_field_matches(month_f, dt.month, 1, 12)
+        and dow_ok
+    )
+
+
+def validate_cron_expr(expr: str) -> str | None:
+    """Return None if ``expr`` is a syntactically usable 5-field cron, else
+    a short error message describing what's wrong."""
+    if not expr or not expr.strip():
+        return "Cron expression is empty"
+    parts = expr.strip().split()
+    if len(parts) != 5:
+        return f"Cron expression must have 5 fields (got {len(parts)})"
+    bounds = [(0, 59), (0, 23), (1, 31), (1, 12), (0, 7)]
+    labels = ["minute", "hour", "day-of-month", "month", "day-of-week"]
+    # Reject if no value in the field matches any candidate value in [lo, hi].
+    for field, (lo, hi), label in zip(parts, bounds, labels):
+        if not any(_cron_field_matches(field, v, lo, hi) for v in range(lo, hi + 1)):
+            return f"Invalid {label} field: '{field}'"
+    return None
+
+
 def detect_interactive_nodes(flow_json: dict | str) -> list[str]:
     """Return list of node names that are interactive (can't run headless).
 
@@ -151,6 +234,21 @@ class CronScheduler:
             if last and last.month == now.month and last.year == now.year:
                 return False
             return now.day == 1 and now.hour == target_hour and now.minute < 2
+
+        elif freq == "cron":
+            expr = schedule.get("cron_expr")
+            if not expr:
+                return False
+            # Avoid firing twice within the same minute when the loop ticks
+            # are bunched. The 60s loop interval + 50s guard means at most
+            # one fire per matching minute even if a tick arrives slightly
+            # late or early.
+            if last and (now - last).total_seconds() < 50:
+                return False
+            try:
+                return cron_matches(expr, now)
+            except Exception:
+                return False
 
         return False
 
