@@ -297,10 +297,12 @@ class ProjectService:
 
     async def update_project(self, name: str, **kwargs) -> dict | None:
         """Update project fields.  Accepted kwargs: description, working_dir,
-        default_model, default_permission_mode, default_env_vars."""
+        default_model, default_permission_mode, default_env_vars,
+        planning_options."""
         allowed = {
             "description", "working_dir", "default_model",
             "default_permission_mode", "default_env_vars",
+            "planning_options",
         }
         updates = {k: v for k, v in kwargs.items() if k in allowed}
         if not updates:

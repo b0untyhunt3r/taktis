@@ -1136,17 +1136,23 @@ class GraphExecutor:
 
     def _get_project_budget(self) -> int:
         """Read context_budget_chars from planning_options, default 150K."""
+        return int(self._get_planning_options().get("context_budget_chars", 150_000))
+
+    def _get_api_call_max_response_kb(self) -> int:
+        """Read per-project api_call_max_response_kb override, default 50KB."""
+        return int(self._get_planning_options().get("api_call_max_response_kb", 50))
+
+    def _get_planning_options(self) -> dict:
+        """Decode the project's planning_options JSON, with empty-dict fallback."""
         if not self._project:
-            return 150_000
+            return {}
         opts = self._project.get("planning_options") or ""
         if isinstance(opts, str):
             try:
                 opts = json.loads(opts) if opts else {}
             except (json.JSONDecodeError, TypeError):
                 opts = {}
-        if not isinstance(opts, dict):
-            opts = {}
-        return int(opts.get("context_budget_chars", 150_000))
+        return opts if isinstance(opts, dict) else {}
 
     def _build_pipeline_context(self, node: GraphNode, mode: str = "standard") -> tuple[str, list[dict]]:
         """Assemble pipeline context via ContextBudget for an LLM node."""
@@ -2187,7 +2193,7 @@ class GraphExecutor:
             body = None
 
         # Execute request
-        max_response = 50 * 1024  # 50KB
+        max_response = self._get_api_call_max_response_kb() * 1024
         try:
             async with httpx.AsyncClient(
                 timeout=timeout_seconds,

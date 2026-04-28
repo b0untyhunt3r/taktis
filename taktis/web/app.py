@@ -902,6 +902,28 @@ async def api_create_project(request: Request):
         except (ValueError, TypeError):
             logger.warning("api_create_project: invalid env_vars JSON, skipping")
 
+    # Optional pipeline settings — applied BEFORE pipeline execution so the
+    # very first run sees the chosen context budget / API response cap.
+    planning_options: dict = {}
+    raw_budget = str(form.get("context_budget_chars", "")).strip()
+    if raw_budget:
+        try:
+            v = int(raw_budget)
+            if v >= 10_000:
+                planning_options["context_budget_chars"] = v
+        except ValueError:
+            logger.warning("api_create_project: invalid context_budget_chars, ignoring")
+    raw_api_kb = str(form.get("api_call_max_response_kb", "")).strip()
+    if raw_api_kb:
+        try:
+            v = int(raw_api_kb)
+            if v >= 1:
+                planning_options["api_call_max_response_kb"] = v
+        except ValueError:
+            logger.warning("api_create_project: invalid api_call_max_response_kb, ignoring")
+    if planning_options:
+        await o.update_project(project["name"], planning_options=json.dumps(planning_options))
+
     # Validate: pipeline template requires a description
     if pipeline_template_id and not description.strip():
         msg = "A description is required when a pipeline template is selected."
@@ -993,6 +1015,76 @@ async def api_update_project_env_vars(request: Request) -> JSONResponse:
     if updated is None:
         return JSONResponse({"error": "Project not found"}, status_code=404)
     return JSONResponse({"ok": True, "env_vars": env_vars})
+
+
+async def api_update_project_settings(request: Request) -> JSONResponse:
+    """PATCH /api/projects/{name}/settings — update pipeline knobs.
+
+    Currently exposes:
+      - ``context_budget_chars`` (int, min 10000) — the project context
+        budget the graph executor and scheduler use when assembling task
+        context. Default 150,000 if unset.
+      - ``api_call_max_response_kb`` (int, min 1) — per-project cap on how
+        much of an API Call node's response is kept. Default 50KB.
+
+    Stored merged into the ``projects.planning_options`` JSON column so
+    other planning options aren't clobbered.
+    """
+    name = request.path_params["name"]
+    o = _orch()
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    project = await o.get_project(name)
+    if project is None:
+        return JSONResponse({"error": "Project not found"}, status_code=404)
+
+    raw_opts = project.get("planning_options") or ""
+    if isinstance(raw_opts, str):
+        try:
+            opts = json.loads(raw_opts) if raw_opts else {}
+        except (ValueError, TypeError):
+            opts = {}
+    else:
+        opts = dict(raw_opts) if isinstance(raw_opts, dict) else {}
+
+    updated_keys: list[str] = []
+
+    if "context_budget_chars" in body:
+        try:
+            v = int(body["context_budget_chars"])
+        except (TypeError, ValueError):
+            return JSONResponse(
+                {"error": "context_budget_chars must be an integer"}, status_code=400
+            )
+        if v < 10_000:
+            return JSONResponse(
+                {"error": "context_budget_chars must be at least 10000"}, status_code=400
+            )
+        opts["context_budget_chars"] = v
+        updated_keys.append("context_budget_chars")
+
+    if "api_call_max_response_kb" in body:
+        try:
+            v = int(body["api_call_max_response_kb"])
+        except (TypeError, ValueError):
+            return JSONResponse(
+                {"error": "api_call_max_response_kb must be an integer"}, status_code=400
+            )
+        if v < 1:
+            return JSONResponse(
+                {"error": "api_call_max_response_kb must be at least 1"}, status_code=400
+            )
+        opts["api_call_max_response_kb"] = v
+        updated_keys.append("api_call_max_response_kb")
+
+    if not updated_keys:
+        return JSONResponse({"error": "No recognized settings in body"}, status_code=400)
+
+    await o.update_project(name, planning_options=json.dumps(opts))
+    return JSONResponse({"ok": True, "updated": updated_keys, "planning_options": opts})
 
 
 async def api_create_phase(request: Request):
@@ -3556,6 +3648,7 @@ def create_app() -> Starlette:
         Route("/api/projects", api_create_project, methods=["POST"]),
         Route("/api/projects/{name}", api_delete_project, methods=["DELETE"]),
         Route("/api/projects/{name}/env-vars", api_update_project_env_vars, methods=["PATCH", "POST"]),
+        Route("/api/projects/{name}/settings", api_update_project_settings, methods=["PATCH"]),
         Route("/api/projects/{name}/phases", api_create_phase, methods=["POST"]),
         Route("/api/projects/{name}/tasks", api_create_task, methods=["POST"]),
         Route("/api/tasks/{task_id}/start", api_start_task, methods=["POST"]),

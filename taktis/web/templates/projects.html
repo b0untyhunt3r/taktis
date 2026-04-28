@@ -76,6 +76,30 @@
       <div id="required-env-vars-rows" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
     </div>
     <input type="hidden" id="env_vars_field" name="env_vars" value="">
+    <details class="form-group" style="margin-top:0.5rem;">
+      <summary style="cursor:pointer; color:var(--accent); font-size:0.85rem; font-weight:600; list-style:none;">
+        + Pipeline Settings
+        <span class="text-muted" style="font-weight:400; font-size:0.78rem;">— context budget &amp; API Call response cap</span>
+      </summary>
+      <div style="margin-top:0.75rem; display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+        <div>
+          <label for="context_budget_chars" style="font-size:0.85rem;">Context Budget (chars)</label>
+          <input type="number" id="context_budget_chars" name="context_budget_chars"
+                 min="10000" step="1000" placeholder="150000" style="width:100%;">
+          <small class="text-muted" style="display:block; margin-top:0.25rem; font-size:0.75rem; line-height:1.5;">
+            Max chars packed into a task's context (PROJECT.md + upstream + shared files). Bump this for pipelines with very large feeds. Default 150,000.
+          </small>
+        </div>
+        <div>
+          <label for="api_call_max_response_kb" style="font-size:0.85rem;">API Call Max Response (KB)</label>
+          <input type="number" id="api_call_max_response_kb" name="api_call_max_response_kb"
+                 min="1" step="1" placeholder="50" style="width:100%;">
+          <small class="text-muted" style="display:block; margin-top:0.25rem; font-size:0.75rem; line-height:1.5;">
+            Per-response cap on API Call nodes. Default 50&nbsp;KB. Editable later under Pipeline Settings on the project page.
+          </small>
+        </div>
+      </div>
+    </details>
     <div id="create-project-error"></div>
     <button type="submit" onclick="return validateProjectForm()">Create Project</button>
   </form>

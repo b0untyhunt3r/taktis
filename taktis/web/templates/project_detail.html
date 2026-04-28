@@ -189,6 +189,69 @@
 </div>
 
 <!-- Environment Variables — substituted as ${VAR} in API Call node URLs/headers/body -->
+<!-- Pipeline Settings — per-project knobs read by graph executor / scheduler -->
+<details class="panel" style="margin-bottom:1rem;">
+  <summary style="cursor:pointer; font-weight:600; font-size:0.95rem; list-style:none;">
+    Pipeline Settings
+    <span class="text-muted" style="font-weight:400; font-size:0.78rem;">— context budget &amp; API Call response size</span>
+  </summary>
+  {% set _opts = project.planning_options or {} %}
+  {% if _opts is string %}{% set _opts = (_opts | from_json) if _opts else {} %}{% endif %}
+  <div style="margin-top:1rem; display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+    <div>
+      <label for="ps-context-budget" style="font-size:0.85rem;">Context Budget (chars)</label>
+      <input type="number" id="ps-context-budget" min="10000" step="1000"
+             value="{{ _opts.get('context_budget_chars', 150000) }}"
+             style="width:100%;">
+      <small class="text-muted" style="display:block; margin-top:0.25rem; font-size:0.75rem; line-height:1.5;">
+        Total chars of project context (PROJECT.md + upstream + shared files) the executor packs into a task. Larger feeds need a larger budget. Default 150,000.
+      </small>
+    </div>
+    <div>
+      <label for="ps-api-max-kb" style="font-size:0.85rem;">API Call Max Response (KB)</label>
+      <input type="number" id="ps-api-max-kb" min="1" step="1"
+             value="{{ _opts.get('api_call_max_response_kb', 50) }}"
+             style="width:100%;">
+      <small class="text-muted" style="display:block; margin-top:0.25rem; font-size:0.75rem; line-height:1.5;">
+        Per-response cap for API Call nodes. Bigger = more raw feed kept; smaller = faster, less token cost. Default 50&nbsp;KB.
+      </small>
+    </div>
+  </div>
+  <div style="margin-top:0.75rem; display:flex; gap:0.5rem; align-items:center;">
+    <button type="button" class="btn btn-sm" onclick="savePipelineSettings()">Save</button>
+    <span id="pipeline-settings-status" style="font-size:0.8rem; color:var(--text-muted);"></span>
+  </div>
+</details>
+<script>
+(function() {
+  const projectName = {{ project.name | tojson }};
+  function getCsrf() {
+    const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+    return m ? m[1] : '';
+  }
+  window.savePipelineSettings = function() {
+    const status = document.getElementById('pipeline-settings-status');
+    status.style.color = 'var(--text-muted)';
+    status.textContent = 'Saving…';
+    const body = {
+      context_budget_chars: parseInt(document.getElementById('ps-context-budget').value, 10),
+      api_call_max_response_kb: parseInt(document.getElementById('ps-api-max-kb').value, 10),
+    };
+    fetch('/api/projects/' + encodeURIComponent(projectName) + '/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify(body),
+    })
+    .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+    .then(res => {
+      if (res.ok) { status.style.color = 'var(--success)'; status.textContent = 'Saved'; }
+      else { status.style.color = 'var(--danger)'; status.textContent = res.data.error || 'Failed to save'; }
+    })
+    .catch(err => { status.style.color = 'var(--danger)'; status.textContent = 'Network error: ' + err.message; });
+  };
+})();
+</script>
+
 <details class="panel" style="margin-bottom:1rem;">
   <summary style="cursor:pointer; font-weight:600; font-size:0.95rem; list-style:none;">
     Environment Variables
