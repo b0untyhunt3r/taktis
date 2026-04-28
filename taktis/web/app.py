@@ -781,7 +781,12 @@ def _accumulate_output_blocks(events: list[dict]) -> list[dict]:
 
 
 async def partial_task_output(request: Request) -> HTMLResponse:
-    """GET /partials/task-output/{task_id}"""
+    """GET /partials/task-output/{task_id}
+
+    Accepts ``?view=timeline`` to render with all tool widgets and thinking
+    blocks collapsed — the timeline shows many tasks at once, so an expanded
+    default would bury the final response.
+    """
     o = _orch()
     task_id = request.path_params["task_id"]
     task = await o.get_task(task_id)
@@ -792,10 +797,13 @@ async def partial_task_output(request: Request) -> HTMLResponse:
     # their tool call collapses, works for both running and completed.
     all_events = await o.get_task_output(task_id)
     blocks = _accumulate_output_blocks(all_events)
+    view = request.query_params.get("view", "task")
+    collapse_all = view == "timeline"
     return templates.TemplateResponse(
         "partials/task_output.html",
         {"request": request, "task": task, "blocks": blocks,
-         "is_running": is_running, "active_page": ""},
+         "is_running": is_running, "active_page": "",
+         "collapse_all": collapse_all},
     )
 
 

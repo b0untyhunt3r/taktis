@@ -17,7 +17,7 @@
 {% endif %}
 
 {% if block.type == 'thinking' %}
-<details class="thinking-block"{% if block.in_progress %} open{% endif %}>
+<details class="thinking-block"{% if block.in_progress and not collapse_all %} open{% endif %}>
 <summary><span class="thinking-icon">{% if block.in_progress %}&#10024;{% else %}&#129504;{% endif %}</span><span class="thinking-label">{% if block.in_progress %}Thinking...{% else %}Thought process{% endif %}</span></summary>
 <div class="thinking-content"{% if block.in_progress %} id="thinking-active"{% endif %}>{{ block.text }}</div>
 </details>
@@ -52,7 +52,7 @@
 {% set tool_lower = block.name | default('') | lower %}
 
 {% if tool_lower == 'bash' %}
-<details class="tool-widget tool-bash"{% if block.result is defined and block.result %} open{% endif %}>
+<details class="tool-widget tool-bash"{% if not collapse_all and block.result is defined and block.result %} open{% endif %}>
 <summary class="tool-widget-header">
 <span class="tw-icon">&#9654;</span>
 <span class="tw-name">Bash</span>
@@ -63,7 +63,7 @@
 </details>
 
 {% elif tool_lower == 'read' %}
-<details class="tool-widget tool-read"{% if block.result is defined and block.result %} open{% endif %}>
+<details class="tool-widget tool-read"{% if not collapse_all and block.result is defined and block.result %} open{% endif %}>
 <summary class="tool-widget-header">
 <span class="tw-icon">&#128196;</span>
 <span class="tw-name">Read</span>
@@ -74,7 +74,7 @@
 </details>
 
 {% elif tool_lower == 'edit' %}
-<details class="tool-widget tool-edit"{% if block.result is defined and block.result %} open{% endif %}>
+<details class="tool-widget tool-edit"{% if not collapse_all and block.result is defined and block.result %} open{% endif %}>
 <summary class="tool-widget-header">
 <span class="tw-icon">&#9999;&#65039;</span>
 <span class="tw-name">Edit</span>
@@ -98,7 +98,7 @@
 </details>
 
 {% elif tool_lower == 'write' %}
-<details class="tool-widget tool-write"{% if block.result is defined and block.result %} open{% endif %}>
+<details class="tool-widget tool-write"{% if not collapse_all and block.result is defined and block.result %} open{% endif %}>
 <summary class="tool-widget-header">
 <span class="tw-icon">&#128221;</span>
 <span class="tw-name">Write</span>
@@ -109,7 +109,7 @@
 </details>
 
 {% elif tool_lower in ['grep', 'glob'] %}
-<details class="tool-widget tool-search"{% if block.result is defined and block.result %} open{% endif %}>
+<details class="tool-widget tool-search"{% if not collapse_all and block.result is defined and block.result %} open{% endif %}>
 <summary class="tool-widget-header">
 <span class="tw-icon">{% if tool_lower == 'grep' %}&#128269;{% else %}&#128193;{% endif %}</span>
 <span class="tw-name">{{ 'Grep' if tool_lower == 'grep' else 'Glob' }}</span>
@@ -120,7 +120,7 @@
 </details>
 
 {% elif tool_lower in ['webfetch', 'websearch'] %}
-<details class="tool-widget tool-web"{% if block.result is defined and block.result %} open{% endif %}>
+<details class="tool-widget tool-web"{% if not collapse_all and block.result is defined and block.result %} open{% endif %}>
 <summary class="tool-widget-header">
 <span class="tw-icon">{% if tool_lower == 'webfetch' %}&#127760;{% else %}&#128269;{% endif %}</span>
 <span class="tw-name">{{ 'WebFetch' if tool_lower == 'webfetch' else 'WebSearch' }}</span>
@@ -131,7 +131,7 @@
 </details>
 
 {% elif tool_lower in ['skill', 'agent', 'task', 'toolsearch'] %}
-<details class="tool-widget tool-agent"{% if block.result is defined and block.result %} open{% endif %}>
+<details class="tool-widget tool-agent"{% if not collapse_all and block.result is defined and block.result %} open{% endif %}>
 <summary class="tool-widget-header">
 <span class="tw-icon">&#9889;</span>
 <span class="tw-name">{{ block.name | default('?') }}</span>
@@ -145,7 +145,7 @@
 
 {% else %}
 {# Fallback: generic tool-call style for unknown tools #}
-<details class="tool-call"{% if block.result is defined and block.result %} open{% endif %}>
+<details class="tool-call"{% if not collapse_all and block.result is defined and block.result %} open{% endif %}>
 <summary class="tool-call-header">
 <span class="tool-call-icon">&#9881;&#65039;</span>
 <span class="tool-call-name">{{ block.name | default('?') }}</span>

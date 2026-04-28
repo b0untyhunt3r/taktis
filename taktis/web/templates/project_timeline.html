@@ -143,13 +143,13 @@
               <div class="tl-task-output"
                    id="tl-output-{{ task.id }}"
                    {% if wave.is_parallel %}
-                   hx-get="/partials/task-output/{{ task.id }}"
+                   hx-get="/partials/task-output/{{ task.id }}?view=timeline"
                    hx-trigger="revealed"
                    hx-swap="innerHTML"
                    {% endif %}>
                 {% if not wave.is_parallel %}
                 {# Sequential tasks: load output via htmx on reveal #}
-                <div hx-get="/partials/task-output/{{ task.id }}"
+                <div hx-get="/partials/task-output/{{ task.id }}?view=timeline"
                      hx-trigger="revealed"
                      hx-swap="innerHTML">
                   <span class="text-muted">Loading output...</span>
